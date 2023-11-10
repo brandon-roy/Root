@@ -1,0 +1,318 @@
+---
+title: "root titer"
+author: "Brandon Roy"
+date: "2023-01-29"
+output: html_document
+---
+
+```{r}
+#load packages
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(multcompView)
+library(ggiraphExtra)
+#import dataset
+root_titer <- read_excel("root titer.xlsx")
+#modify to factoral list
+root_titer$dpi <- as.factor(root_titer$dpi)
+# specify treatment wise comparisons
+my_comparisons <- list(c(2,5),c(2,4),c(3,5),c(2,3), c(3,4),c(4,5))
+my_comparisons2 <- list(c(2,4),c(2,5))
+my_comparisons3 <- list(c(2,5),c(3,4))
+
+colorlist <- c('#8d96a3','#00798c','light blue','#d1495b','orange')
+colorlist2 <- c('#8d96a3','#d1495b','#00798c','light blue','orange')
+colorlist3 <- c('#8d96a3','light blue','#00798c','orange','#d1495b')
+
+
+root_titer$Treatment <- factor(root_titer$Treatment, levels = c('control', 'wildtype F13', 'mutant F13 1E G802K', 'wildtype GHu','mutant GHu 1E K802G'))
+
+```
+
+```{r}
+# intial tests
+ggboxplot(root_titer, 'Treatment', 'log', color = "dpi", fill= c(colorlist,colorlist,colorlist),
+ palette = c("black", "grey")) + stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "control", hide.ns = F)
+
+ggplot(root_titer, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + 
+  ylab("") + 
+  xlab("Viral treatment") + ylim(0,8) +
+  theme(aspect.ratio = 1.5, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+ggplot(root_titer, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + stat_compare_means(method= "t.test", paired = T, hide.ns=F) + 
+  ylab("") + 
+  xlab("Viral treatment") + ylim(0,8) +
+  theme(aspect.ratio = 1.5, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+  
+ggplot(root_titer, aes(x=Treatment, y=log), fill= c(colorlist,colorlist,colorlist)) + stat_boxplot(fill=c(colorlist,colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + 
+  ylab("") + stat_compare_means(label = 'identity',method ='wilcox.test', comparisons = all, geom=T, hide.ns=T, label.y = c(6.5, 7.25)) +
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.9, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+ggplot(root_titer, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + 
+  ylab("") +
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.9, text=element_text(size=15))
+
+
+ggplot(root_titer, aes(x=dpi, y=log), fill= c(colorlist,colorlist,colorlist)) + stat_boxplot(fill=c(c('#8d96a3','#8d96a3','#8d96a3','#00798c','#00798c','#00798c','light blue','light blue','light blue','#d1495b','#d1495b','#d1495b', 'orange','orange','orange'))) + facet_wrap(root_titer$dpi) + theme_bw() + stat_compare_means(method ='wilcox.test', label.y=7.5, hide.ns=F) + 
+  ylab("") + 
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.75, text=element_text(size=10)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  facet_wrap(~Treatment, ncol=5)
+
+```
+
+```{r}
+# incorporation of 4dpi samples
+all_comparisons <- list(c(1,4),c(1,3),c(2,4),c(1,2), c(2,3),c(3,4),c(1,5),c(2,5),c(3,5),c(4,5))
+my_comparisons <- list(c(1,4),c(1,3),c(2,4),c(1,2), c(2,3),c(3,4))
+root_titer2 <- root_titer[!root_titer$Treatment %in% 'control',]
+colorlist <- c('#00798c','light blue','#d1495b','orange')
+root_titer2$Treatment <- factor(root_titer2$Treatment, levels = c('wildtype F13', 'mutant F13 1E G802K', 'wildtype GHu','mutant GHu 1E K802G'))
+
+
+ggplot(root_titer2, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist,colorlist)) + facet_wrap(root_titer2$dpi) + theme_bw() + stat_compare_means(label = 'identity',method ='wilcox.test', comparisons = my_comparisons, geom=T, hide.ns=T, label.y = c(6.5, 7.25)) + 
+  ylab("") + 
+  xlab("Viral treatment") + ylim(0,8) +
+  theme(aspect.ratio = 1.5, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+ggplot(root_titer2, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist,colorlist)) + facet_wrap(root_titer2$dpi) + theme_bw() + 
+  ylab("") + 
+  xlab("Viral treatment") + ylim(0,8) +
+  theme(aspect.ratio = 1.5, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+
+ggplot(root_titer2, aes(x=dpi, y=log), fill= c(colorlist,colorlist,colorlist)) + stat_boxplot(fill=c(c('#00798c','#00798c','#00798c','light blue','light blue','light blue','#d1495b','#d1495b','#d1495b', 'orange','orange','orange'))) + facet_wrap(root_titer$dpi) + theme_bw() + stat_compare_means(method ='wilcox.test', label.y=7.5, hide.ns=F) + 
+  ylab("") + 
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.75, text=element_text(size=10)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  facet_wrap(~Treatment, ncol=4)
+
+root_titer2 %>% 
+  mutate(across(Treatment, levels=c('wildtype F13', 'mutant F13 1E G802K', 'wildtype GHu','mutant GHu 1E K802G'))) 
+ggplot(root_titer2, aes(x=dpi, y=log, group=dpi), fill= c(colorlist,colorlist,colorlist)) + stat_boxplot(fill=c('#00798c','#00798c','#00798c','light blue','light blue','light blue','#d1495b','#d1495b','#d1495b', 'orange','orange','orange'), ) + facet_wrap(~Treatment, ncol=4) + stat_compare_means(label = 'identity',method ='wilcox.test', comparisons = my_comparisons, geom=T, hide.ns=T, label.y = c(6.5, 7.25)) + 
+  theme_bw() +
+  ylab("") + 
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 2, text=element_text(size=13)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  facet_grid(~factor(Treatment,levels= c('wildtype F13', 'mutant F13 1E G802K', 'wildtype GHu','mutant GHu 1E K802G')))
+```
+
+```{r}
+
+ggboxplot(ToothGrowth, x = "dose", y = "len",
+          color = "dose", palette = "npg")+
+# Add pairwise comparisons p-value
+stat_compare_means(comparisons = my_comparisons, label.y = c(29, 35, 40))+
+stat_compare_means(label.y = 45)     # Add global Anova p-value
+
+anno_df = compare_means(log ~ Treatment, group.by = "dpi", data = root_titer) 
+
+ggplot(root_titer, aes(x=dpi, y=log, fill=Treatment)) +
+  stat_summary(fun=mean, geom="bar", colour="black", alpha=1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width=0.25) +
+  geom_point(color="black", shape=21, show.legend=TRUE, size=3, stroke=1) +
+  facet_wrap(~dpi) +
+  geom_signif(data = anno_df, aes(x=Treatment,
+                                  annotations=p.signif,
+                                  y_position = 6),
+              manual = TRUE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(expand = expansion(mult = c(0.2, 0.2)))
+
+
+
+```
+
+```{r}
+
+#correlation analysis of root titer to leaf traits
+#only uses wildtype GHu individuals because this is the only symptomatic infection pairing
+
+root_titer2 <- read_excel("leaf_symptoms_root_titer.xlsx")
+
+model <- lm(`log(2^(-∆∆CT))` ~ `days showing symptoms`, data=root_titer2)
+summary(model)
+
+ggplot(root_titer2, aes(x=`days showing symptoms`, y=`log(2^(-∆∆CT))`)) + 
+  geom_point() +
+  geom_smooth(method=lm) + 
+  theme(text = element_text(size = 20), axis.text = element_text(size = 16), aspect.ratio = 0.4)
+  
+
+
+
+ggplot(GHu_Summary2, aes(x=`days showing symptoms`, y=`number of root tips`)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+```
+
+```{r}
+
+# import viral RNA-Seq data
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(xlsx)
+
+Viral.Reads.Table <- read.xlsx("Root viral reads.xlsx", 1)
+Viral.Reads.Table$group <- factor(paste0(Viral.Reads.Table$Treatment, Viral.Reads.Table$Days.post.inoculation))
+
+anno_df1 = compare_means(RNA1.RPKM ~ Treatment, group.by = "Days.post.inoculation", data = Viral.Reads.Table) 
+anno_df2 = compare_means(RNA2.RPKM ~ Treatment, group.by = "Days.post.inoculation", data = Viral.Reads.Table)
+
+ggdotplot(data=Viral.Reads.Table, x='Days.post.inoculation', y='RNA2.RPKM', ylab = "Normalized GFLV-RNA2 Counts", xlab="Days post inoculation", fill="Treatment", palette = c('#8d96a3', 'orange', '#d1495b'), alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right")
+
+ggdotplot(data=Viral.Reads.Table, y='RNA2.RPKM', ylab = "Normalized GFLV-RNA2 Counts", xlab="Days post inoculation", fill="Treatment", palette = c('#8d96a3', 'orange', '#d1495b'), alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right") + facet_wrap('Days.post.inoculation')
+
+ggplot(data=Viral.Reads.Table, aes(x=Treatment,y=RNA2.RPKM, col=Treatment)) + geom_line() + facet_wrap('Days.post.inoculation') + 
+
+```
+```{r}
+
+library(ggpubr)
+
+ggline(Viral.Reads.Table, x = 'Days.post.inoculation', y= 'RNA1.RPKM',color = 'Treatment', add = c("mean_se", "dotplot"), palette = c('#8d96a3', 'orange', '#d1495b')) + scale_y_continuous(name="Viral Titer RNA1 RPKM", labels = scales::comma) + theme(aspect.ratio = 3/2)
+ggline(Viral.Reads.Table, x = 'Days.post.inoculation', y= 'RNA2.RPKM',color = 'Treatment', add = c("mean_se", "dotplot"), palette = c('#8d96a3', 'orange', '#d1495b')) +  scale_y_continuous(name="Viral Titer RNA2 RPKM", labels = scales::comma) + theme(aspect.ratio = .4) + 
+stat_compare_means(label = 'p.signif', method ='wilcox.test', ref.group = "mock control", hide.ns = F)
+
+ggplot(Viral.Reads.Table, aes(Treatment, RNA1.RPKM)) + stat_summary(fun.y='mean', geom="bar", fill=c('#8d96a3', 'orange', '#d1495b','#8d96a3', 'orange', '#d1495b','#8d96a3', 'orange', '#d1495b'), color='black') +  
+  theme_bw() +
+  theme(aspect.ratio = 2, text=element_text(size=17)) + 
+  facet_wrap(~Days.post.inoculation, ) + 
+  ylab("GFLV RNA1 RPKM") + 
+  xlab("")
+ggplot(Viral.Reads.Table, aes(Treatment, RNA2.RPKM)) + stat_summary(fun.y='mean', geom="bar", fill=c('#8d96a3', 'orange', '#d1495b','#8d96a3', 'orange', '#d1495b','#8d96a3', 'orange', '#d1495b'), color='black') + 
+  facet_wrap(~Days.post.inoculation) + 
+  theme_bw() + 
+  theme(aspect.ratio = 2, text=element_text(size=17)) + 
+  ylab("GFLV RNA2 RPKM") + 
+  xlab("")
+
+
+```
+
+```{r}
+# Anova on all data
+one.way <- aov(RNA2.RPKM ~ Treatment + Days.post.inoculation + Treatment:Days.post.inoculation, data=Viral.Reads.Table)
+summary(one.way)
+plot(one.way)
+
+# Extract out only time point 4
+viral.reads.table4 <- filter(Viral.Reads.Table, Days.post.inoculation == 4)
+oneway4 <- aov(RNA1.RPKM ~ Treatment, data = viral.reads.table4)
+summary(oneway4)
+plot(oneway4)
+# The model generated assumes homoscedasticity,  follow a tukey test
+TukeyHSD(oneway4)
+
+# Extract out only time point 17
+viral.reads.table17 <- filter(Viral.Reads.Table, Days.post.inoculation == 17)
+oneway17 <- aov(RNA1.RPKM ~ Treatment, data = viral.reads.table17)
+summary(oneway17)
+plot(oneway17)
+# The model generated assumes homoscedasticity,  follow a tukey test
+TukeyHSD(oneway17)
+
+# Extract out only time point 26
+viral.reads.table26 <- filter(Viral.Reads.Table, Days.post.inoculation == 26)
+oneway26 <- aov(RNA1.RPKM ~ Treatment, data = viral.reads.table26)
+summary(oneway26)
+plot(oneway26)
+# The model generated assumes homoscedasticity,  follow a tukey test
+TukeyHSD(oneway26)
+
+viral.reads.table4 <- filter(Viral.Reads.Table, Days.post.inoculation == 4)
+oneway4 <- aov(RNA1.RPKM ~ Treatment, data = viral.reads.table4)
+summary(oneway4)
+plot(oneway4)
+# The model generated assumes homoscedasticity,  follow a tukey test
+TukeyHSD(oneway4)
+
+
+# Extract out only time point 17
+viral.reads.table17 <- filter(Viral.Reads.Table, Days.post.inoculation == 17)
+oneway17 <- aov(RNA2.RPKM ~ Treatment, data = viral.reads.table17)
+summary(oneway17)
+plot(oneway17)
+# The model generated assumes homoscedasticity,  follow a tukey test
+TukeyHSD(oneway17)
+
+# Extract out only time point 26
+viral.reads.table26 <- filter(Viral.Reads.Table, Days.post.inoculation == 26)
+oneway26 <- aov(RNA2.RPKM ~ Treatment, data = viral.reads.table26)
+summary(oneway26)
+plot(oneway26)
+# The model generated assumes homoscedasticity,  follow a tukey test
+TukeyHSD(oneway26)
+
+
+
+
+ggboxplot(viral.reads.table7, x="group", y="RNA1.RPKM")
+kruskal7 <- kruskal.test(RNA1.RPKM ~ group, data = Viral.Reads.Table)
+kruskal7
+# The Kruskal-Wallis test rejects the null hypothesis (p-value=0.008216), two or more treatments are statistically different from each other.
+
+pwc <- dunn_test(RNA2.RPKM ~ group, p.adjust.method="bonferroni", data=Viral.Reads.Table)
+pwc
+# The Dunn test only results in the control treatment being statistically different from two of the viral treatment groups.
+viral.reads.table7$Treatment <- as.factor(viral.reads.table7$Treatment)
+pwc2 <- wilcox_test(RNA2.RPKM ~ group, p.adjust.method="fdr", data=Viral.Reads.Table)
+pwc2
+
+pwc <- pwc %>% add_xy_position(x = "Treatment")
+
+
+viral.reads.table7 %>% group_by(Treatment) %>% shapiro_test(RNA2.RPKM)
+ggqqplot(viral.reads.table7, x="RNA2.RPKM", facet.by="Treatment")
+viral.reads.table7 %>% levene_test(RNA2.RPKM ~ Treatment)
+stat.test <- viral.reads.table7 %>% t_test(RNA2.RPKM ~ Treatment) %>% add_significance()
+stat.test <- stat.test %>% add_xy_position(x= "Treatment")
+ggboxplot(viral.reads.table7, x="Treatment", y="RNA2.RPKM", ylab = "GFLV-RNA2 Titer (TPKM)", xlab = "Treatment", add= "jitter", repel=TRUE, fill="Treatment",palette = c('#8d96a3', 'orange', '#d1495b'), alpha=0.70, width=0.6) + theme(axis.text.x = element_text(angle=45, hjust=1), aspect.ratio = 0.6) + stat_pvalue_manual(stat.test, tip.length = 0.1,hide.ns=TRUE) + labs(subtitle = get_test_label(stat.test, detailed = TRUE))
+
+stat.test.transcriptomics <- Viral.Reads.Table %>%
+  group_by(Days.post.inoculation) %>%
+  t_test(Normalized.RNA2 ~ Treatment) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance()
+stat.test.transcriptomics <- stat.test.transcriptomics %>% add_xy_position(fun='max',x='Treatment')
+ggboxplot(data=Viral.Reads.Table, x='Treatment', y='Normalized.RNA2', ylab = "GFLV-RNA2 Titer (TPKM)", xlab = F, facet.by='Days.post.inoculation', panel.labs.background = list('light green'), fill='Treatment',palette = c('#8d96a3', 'orange', '#d1495b'),alpha=0.70, width=0.8,ylim=c(0,100000)) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position =  'none' )+ stat_pvalue_manual(stat.test.transcriptomics, hide.ns = T, remove.bracket = F, y.position = 90000, step.increase = .1)
+
+#ggboxplot(data=Viral.Reads.Table, x='Treatment', y='Normalized.RNA2', ylab = "GFLV-RNA2 Titer (TPKM)", xlab = F, facet.by='Days.post.inoculation', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position ="top")
+
+```
+
+
+```{r}
+# For 4dpi titer comparison
+viral.reads.table4 <- filter(Viral.Reads.Table, Time..dpi. == 4)
+viral.reads.table4 %>% group_by(Treatment) %>% shapiro_test(Normalized.RNA2)
+ggqqplot(viral.reads.table4, x="Normalized.RNA2", facet.by="Treatment")
+viral.reads.table4 %>% levene_test(Normalized.RNA2 ~ Treatment)
+stat.test4 <- viral.reads.table4 %>% t_test(Normalized.RNA2 ~ Treatment) %>% add_significance()
+stat.test4 <- stat.test4 %>% add_xy_position(x= "Treatment")
+ggboxplot(viral.reads.table4, x="Treatment", y="Normalized.RNA2", ylab = "GFLV Titer (TPM)", xlab = "Treatment", add= "jitter", repel=TRUE, fill="Treatment",palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.6) + theme(axis.text.x = element_text(angle=45, hjust=1),aspect.ratio=0.6) + stat_pvalue_manual(stat.test4, tip.length = 0.1,hide.ns=TRUE) + labs(subtitle = get_test_label(stat.test4, detailed = TRUE))
+
+# For 12dpi titer comparison
+viral.reads.table12 <- filter(Viral.Reads.Table, Time..dpi. == 12)
+viral.reads.table12 %>% group_by(Treatment) %>% shapiro_test(Normalized.RNA2)
+ggqqplot(viral.reads.table12, x="Normalized.RNA2", facet.by="Treatment")
+viral.reads.table12 %>% levene_test(Normalized.RNA2 ~ Treatment)
+stat.test12 <- viral.reads.table12 %>% t_test(Normalized.RNA2 ~ Treatment) %>% add_significance()
+stat.test12 <- stat.test12 %>% add_xy_position(x= "Treatment")
+ggboxplot(viral.reads.table12, x="Treatment", y="Normalized.RNA2", ylab = "GFLV Titer (TPKM)", xlab = "Treatment", add= "jitter", repel=TRUE, fill="Treatment",palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.6) + theme(axis.text.x = element_text(angle=45, hjust=1),aspect.ratio=0.6) + stat_pvalue_manual(stat.test12, tip.length = 0.1,hide.ns=TRUE) + labs(subtitle = get_test_label(stat.test12, detailed = TRUE))
+
+
+```
+

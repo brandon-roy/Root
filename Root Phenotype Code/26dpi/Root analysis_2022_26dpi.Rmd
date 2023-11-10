@@ -1,0 +1,316 @@
+---
+title: "Winter Cohort 1"
+author: "Brandon Roy"
+date: "10.24.22"
+output:
+  word_document: default
+  html_document: default
+---
+
+# Description of dataset
+# Harvested 47 days after sowing, 16 days after inoculation
+# Treatments        # No. Inoculated      # Infected
+# Control               15                    0
+# F13 WT                15                    5
+# F13 Mutant            21                    11
+# GHU WT                15                    13
+# GHU Mutant            20                    17
+
+# 25 individuals uninfected but inoculated
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(gplots)
+library(corrplot)
+library(multcompView)
+library(rcompanion)
+library(DescTools)
+library(FSA)
+library(data.table)
+colorlist <- c('#8d96a3','#00798c','light blue','#d1495b','orange')
+```
+
+
+```{r}
+Root_Summary_1 <- read_excel("Winter Cohort 1 Rhizovision.xlsx", sheet=1)
+
+# variable assignment
+Root_Summary_1$Treatment = as.factor(Root_Summary_1$treatment)
+
+Root_Summary_1 <- Root_Summary_1 %>% mutate(Treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))  
+ggboxplot(Root_Summary_1, x = "treatment", y= "number of root tips")+
+  stat_compare_means(method = 'anova')
+
+# The six treatments are mock inoculation, uninfected, GFLV GHu wild type strain, GFLV GHu Mutant of 2404-2424 F13 cross,     
+# GFLV F13 wild type strain, and GFLV F13 Mutant of 2404-2424 GHu cross strain.
+
+```
+
+```{r}
+#Height
+Height_plot <- ggboxplot(Root_Summary_1, x = "Treatment", y= "Height (mm)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, ylab = "Height (mm)")+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+#Volume
+Vol_plot <- ggboxplot(Root_Summary_1, x = "Treatment", y= "volume (mm^3)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, ylab = "Volume (mm^3)")+
+  stat_compare_means(label = 'p.signif', method ='wilcox.test', ref.group = "Control", hide.ns = TRUE)
+
+Height_plot
+
+Vol_plot
+
+
+######### WHAT CAN WE CONCLUDE? #############
+
+
+ggviolin(Root_Summary_1, x = "Treatment", y= "total root length (mm)")
+ggboxplot(Root_Summary_1, x = "Treatment", y= "number of branch points")
+ggboxplot(Root_Summary_1, x = "Treatment", y= "network area (mm^2)")
+ggboxplot(Root_Summary_1, x = "Treatment", y= "average diameter (mm)")
+###
+
+tipmodel1 <- aov(tips1 ~ Treatment, data = Root_Summary_1)
+tipmodel1
+
+aov(tipmodel1)
+anova(tipmodel1)
+plot(tipmodel1)
+
+
+ggdensity(Root_Summary_1$`number of root tips`)
+ggqqplot(Root_Summary_1$`number of root tips`)
+shapiro.test(Root_Summary_1$`number of root tips`) # not a normal distribution for root tips
+ggdensity(Root_Summary_1, x = "number of root tips", y= '..count..', facet.by = "Treatment")
+```
+
+```{r}
+plotmeans(tips1 ~ treatment1, xlab="treatment", ylab="Number of Tips",
+main="Root Hairs with respect to infection by GFLV")
+
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('number of root tips', type = "mean_se")
+
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('number of branch points', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('total root length (mm)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('branching frequency (mm^-1)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('network area (mm^2)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('average diameter (mm)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('median diameter (mm)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('perimeter (mm)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('volume (mm^3)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('surface area (mm^2)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('height (mm)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('root dry biomass (g)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('shoot dry biomass (g)', type = "mean_se")
+Root_Summary_1 %>%
+  group_by(treatment) %>%
+  get_summary_stats('root to shoot ratio', type = "mean_se")
+```
+
+```{r, Statistics}
+
+# Root tip stats 
+res_tip <- Root_Summary_3 %>% kruskal_test(`number of root tips` ~ `treatment`) # reject
+pwc_tip <- Root_Summary_1 %>%
+  dunn_test(`number of root tips` ~ `Treatment`, p.adjust.method = "bonferroni")
+pwc_tip
+
+DT = dunnTest(`number of root tips` ~ Treatment, data = Root_Summary_1, method = 'bonferroni')
+PT = DT$res
+tiplabel = cldList(P.adj ~ Comparison, data = PT, threshold = 0.05)
+tiplabel1 <- tiplabel %>% arrange(c("mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))
+
+# Diameter stats
+res_dia <- Root_Summary_1 %>% kruskal_test(`average diameter (mm)` ~ Treatment)
+pwc_dia <- Root_Summary_1 %>%
+  dunn_test(`average diameter (mm)` ~ `Treatment`, p.adjust.method = "bonferroni")
+pwc_dia
+
+DDT = dunnTest(`average diameter (mm)` ~ Treatment, data = Root_Summary_1, method = 'bonferroni')
+PDT = DDT$res
+dilabel = cldList(P.adj ~ Comparison, data = PDT, threshold = 0.05)
+dilabel1 <- dilabel %>% arrange(c("mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))
+
+# Branching frequency stats
+res_nb <- Root_Summary_1 %>% kruskal_test(`branching frequency (mm^-1)` ~ Treatment)
+pwc_nb <- Root_Summary_1 %>%
+  dunn_test(`branching frequency (mm^-1)` ~ `Treatment`, p.adjust.method = "bonferroni")
+pwc_nb
+
+DBT = dunnTest(`branching frequency (mm^-1)` ~ Treatment, data = Root_Summary_1, method = 'bonferroni')
+PBT = DBT$res
+brlabel = cldList(P.adj ~ Comparison, data = PBT, threshold = 0.05)
+brlabel1 <- brlabel %>% arrange(c("mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))
+```
+
+
+
+```{r}
+#Root tips 
+ggboxplot(Root_Summary_1, x = "Treatment", y= "number of root tips", fill = "Treatment", palette =colorlist2, labels = FALSE, xlab = FALSE, width = 0.5) +
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE, text.size = 20) + 
+  theme(aspect.ratio = 1)
+
+ggviolin(Root_Summary_1, x = "Treatment", y= "number of root tips", fill = "Treatment", palette =colorlist, xlab = FALSE, alpha = 1)+  
+  geom_boxplot(width = .2, alpha = 0.9, fatten = NULL, show.legend = TRUE, legend='right') +
+  stat_pvalue_manual(pwc_tip, hide.ns=T, y.position =500, step.increase=0.1) +
+  labs(subtitle = get_test_label(res_tip), detailed = T, caption = get_pwc_label(pwc_tip)) + 
+  stat_summary(fun = "mean", geom = "point") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = .1) + 
+  theme(aspect.ratio = 1, axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(legend.position = 'right')
+
+p <- ggviolin(Root_Summary_1, x = "Treatment", y= "number of root tips", fill = "Treatment", palette =colorlist, xlab = FALSE, alpha = 1)+  
+  geom_boxplot(width = .2, alpha = 0.9, fatten = NULL, show.legend = TRUE, legend='right') +
+  stat_summary(fun = "mean", geom = "point") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = .1) + 
+  theme(aspect.ratio = 1, axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(legend.position = 'right')
+p + annotate("text", x = 1:6, y= 600, label = tiplabel1$Letter)
+
+nrow(Root_Summary_1)
+
+Root_Summary_1$Treatment
+
+```
+```{r}
+# Diameter plots with stat labels
+ggviolin(Root_Summary_1, x = "Treatment", y= "average diameter (mm)", fill = "Treatment", palette =colorlist, xlab = FALSE, alpha = 1)+  
+  geom_boxplot(width = .2, alpha = 0.9, fatten = NULL, show.legend = TRUE, legend='right') +
+  stat_pvalue_manual(pwc_dia, hide.ns=T, y.position = 1.5, step.increase=0.1) +
+  labs(subtitle = get_test_label(res_dia), detailed = T, caption = get_pwc_label(pwc_dia)) +
+  stat_summary(fun = "mean", geom = "point") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = .1) + 
+  theme(aspect.ratio = 1, axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(legend.position = 'right')
+
+d <- ggviolin(Root_Summary_1, x = "Treatment", y= "average diameter (mm)", fill = "Treatment", palette =colorlist, xlab = FALSE, alpha = 1)+  
+  geom_boxplot(width = .2, alpha = 0.9, fatten = NULL, show.legend = TRUE, legend='right') +
+  stat_summary(fun = "mean", geom = "point") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = .1) + 
+  theme(aspect.ratio = 1, axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(legend.position = 'right')
+d + annotate("text", x = 1:5, y= 1.4, label = dilabel1$Letter)
+```
+
+
+```{r}
+ggviolin(Root_Summary_1, x = "Treatment", y= "branching frequency (mm^-1)", fill = "Treatment", palette =colorlist, xlab = FALSE, alpha = 1)+  
+  #geom_boxplot(width = .2, alpha = 0.9, fatten = NULL, show.legend = TRUE, legend='right') +
+  stat_pvalue_manual(pwc_nb, hide.ns=T, y.position = 1.2, step.increase=0.1) +
+  labs(subtitle = get_test_label(res_nb), detailed = T, caption = get_pwc_label(pwc_nb)) +
+  stat_summary(fun = "mean", geom = "point") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = .1) + 
+  theme(aspect.ratio = 1, axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(legend.position = 'right')
+
+d <- ggviolin(Root_Summary_1, x = "Treatment", y= "branching frequency (mm^-1)", fill = "Treatment", palette =colorlist, xlab = FALSE, alpha = 1)+  
+  geom_boxplot(width = .1, alpha = 0.9, fatten = NULL, show.legend = TRUE, legend='right') +
+  stat_summary(fun = "mean", geom = "point") +
+  stat_summary(fun.data = "mean_se", geom = "errorbar", width = .1) + 
+  theme(aspect.ratio = 1, axis.text.x = element_text(angle = 60, hjust = 1)) +
+  theme(legend.position = 'right')
+d + annotate("text", x = 1:5, y= 1.2, label = brlabel1$Letter)
+```
+
+
+
+```{r}
+#Total Root Length
+rtlen <- ggboxplot(Root_Summary_1, x = "Treatment", y= "total root length (mm)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='wilcox.test', ref.group = "Control", hide.ns = TRUE) + theme(aspect.ratio = 1)
+#Number of Branch Points
+bp <- ggboxplot(Root_Summary_1, x = "Treatment", y= "number of branch points", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)+ theme(aspect.ratio = 1)
+# ggsave()
+#Average Diameter
+dia <- ggboxplot(Root_Summary_1, x = "Treatment", y= "average diameter (mm)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)+ theme(aspect.ratio = 1)
+rtlen
+bp
+dia
+
+#multi_plot_tips <- ggarrange(soil2021 + rremove("xlab"), soil_2022 + rremove("ylab"))
+#multi_plot_tips
+
+# create multi panel plot
+multi_plot <- ggarrange(rtip + rremove("x.text"), rtlen + rremove("x.text"),  bp + rremove("x.text"),dia + rremove("x.text"), common.legend = TRUE, legend = 'top',labels = 'AUTO', rows=4, cols=1, font.label = list(size=20)) + theme(aspect.ratio =0.8)
+multi_plot
+ggarrange(rtip + rremove("x.text"), rtlen + rremove("x.text"), bp, dia, common.legend = TRUE, labels = 'AUTO')
+#ggsave("Multipane root.tiff", plot = multi_plot)
+```
+
+```{r}
+
+#Height
+ggviolin(Root_Summary_1, x = "treatment", y= "height (mm)", fill = "treatment", palette = "jco", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='anova', ref.group = "Control", hide.ns = TRUE)
+
+#Volume
+ggviolin(Root_Summary_1, x = "treatment", y= "volume (mm^3)", fill = "Treatment")
+rtvol1 <- ggboxplot(Root_Summary_1, x = "Treatment", y= "volume (mm^3)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5)+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+#Network Area
+rtnet1 <- ggboxplot(Root_Summary_1, x = "Treatment", y= "network area (mm^2)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+#Surface Area
+rtsa1 <- ggboxplot(Root_Summary_1, x = "Treatment", y= "surface area (mm^2)", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+
+#combine everything together for a 4-panel figure
+metaplot1 <- ggarrange(he1 + rremove("x.text"), rtvol1 + rremove("x.text"), rtnet1 + rremove("x.text"), rtsa1 + rremove("x.text"),  common.legend = TRUE, legend = 'bottom',labels = 'AUTO')
+metaplot1
+
+```
+```{r}
+
+root_sum_matrix1 <- Root_Summary_3[c(5:9,12:22)]
+
+root_cor1 <- cor(root_sum_matrix1, use='complete.obs')
+
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='ward.D2', tl.col='black', tl.srt=45)
+
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='average', tl.col='black', tl.srt=45, addrect=4, method="circle")
+res1 = cor.mtest(root_cor1, conf.level=0.99)
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='average', tl.col='black', tl.srt=45, addrect=6, method="circle", p.mat = res1$p, sig.level = c(0.001, 0.01, 0.05), pch.cex = 0.9, insig = 'label_sig', pch.col = 'grey20')
+```
+
+#Root tips
+ggboxplot(Root_Summary, x = "Treatment", y= "Root tips", fill = "Treatment", palette = "jco", xlab = FALSE, width = 0.5)+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+#Total Root Length
+ggboxplot(Root_Summary, x = "Treatment", y= "Total root length (mm)", color = "Treatment", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+#Number of Branch Points
+ggboxplot(Root_Summary, x = "Treatment", y= "Number of branch points", color = "Treatment", xlab = FALSE, width = 0.5, )+
+  stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = TRUE)
+#Average Diameter
+ggboxplot(Root_Summary, x = "Treatment", y= "Average diameter (mm)", color = "Treatment", xlab = FALSE, width = 0.5,)+
+  stat_compare_means(label = 'p.signif', method ='wilcox.test', ref.group = "Control", hide.ns = TRUE)

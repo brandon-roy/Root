@@ -1,0 +1,508 @@
+---
+title: "Combined RSA"
+author: "Brandon Roy"
+date: "2023-07-06"
+output: html_document
+---
+
+```{r}
+#load packages
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(multcompView)
+library(ggiraphExtra)
+library(corrplot)
+
+early <- read_xlsx("4dpi/13_Rhizo.xlsx")
+mid1 <- read_xlsx("17dpi_1/Root Summary.xlsx")
+mid2 <- read_xlsx("17dpi_2/Winter Cohort 1 Rhizovision.xlsx")
+late <- read_xlsx("26dpi/Fall Cohort2_Rhizovision data.xlsx")
+
+early["dpi"]=4
+early["age"]=32
+mid1['dpi']=17
+mid1['age']=47
+mid2['dpi']=17
+mid2['age']=50
+late['dpi']=26
+late['age']=57
+```
+
+
+```{r}
+# merge the matrices
+early <- as.matrix(early)
+mid1 <- as.matrix(mid1)
+mid2 <- as.matrix(mid2)
+late <- as.matrix(late)
+
+samecols <- intersect(colnames(early), colnames(mid1))
+two <- merge(early, mid1, by=samecols, all =TRUE)[samecols]
+sametwocols <- intersect(colnames(two),colnames(mid2))
+three <- merge(two, mid2, by=sametwocols, all =TRUE)[sametwocols]
+sametwocolstwo <- intersect(colnames(three),colnames(late))
+all_RSA <- merge(three, late, by=sametwocolstwo, all=TRUE)[sametwocolstwo]
+all_RSA_1 <- as.data.frame(all_RSA[c(2:16)])
+
+all_RSA_2 <- mutate_all(all_RSA_1, function(x) as.numeric(as.character(x)))
+all_RSA_2 <- all_RSA_2[-c(81:82),]
+sapply(all_RSA_2, class)
+
+
+```
+
+
+```{r}
+
+root_cor1 <- cor(all_RSA_2, use='na.or.complete')
+root_cor1 <- cor(all_RSA_2, use='na.or.complete', method="spearman")
+
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='ward.D2', tl.col='black', tl.srt=45)
+
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='average', tl.col='black', tl.srt=45, addrect=4, method="circle")
+res1 = cor.mtest(root_cor1, conf.level=0.99)
+corrplot(root_cor1, type = 'lower', order='hclust', hclust.method='average', tl.col='black', tl.srt=45, addrect=6, method="square", p.mat = res1$p, sig.level = c(0.001, 0.01, 0.05), pch.cex = 0.9, insig = 'label_sig', pch.col = 'grey', diag=T)
+
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='average', tl.col='black', tl.srt=90, method="circle", addrect=5, p.mat = res1$p, sig.level = c(0.001, 0.01, 0.05), pch.cex = 0.9, insig = 'label_sig', pch.col = 'white', diag=TRUE)
+
+corrplot(root_cor1, type = 'full', order='hclust', hclust.method='average', tl.col='black', tl.srt=90, method="number", p.mat = res1$p, sig.level = c(0.001, 0.01, 0.05), pch.cex = 0.9, insig = 'label_sig', pch.col = 'white', diag=TRUE)
+
+corrplot.mixed(root_cor1)
+
+view(all_RSA_2)
+pc_RSA <- cbind(all_RSA_2, all_RSA$treatment)
+
+pc <- prcomp(root_cor1)
+library(devtools)
+install_github("vqv/ggbiplot")
+library(ggbiplot)
+
+g <- ggbiplot(pc,
+              obs.scale = 1,
+              var.scale = 1,)
+g <- g + scale_color_discrete(name = '')
+g <- g + theme(legend.direction = 'horizontal',
+               legend.position = 'top')
+g
+ggbiplot(pc, var.scale=.5, obs.scale=.5)
+
+```
+
+```{r}
+library(ggalt)
+spline_int <- as.data.frame(spline(all_RSA_2$hour, d$impressions))
+ggplot(d) + 
+  geom_point(aes(x = hour, y = impressions, colour = cvr), size = 3) +
+  geom_line(data = spline_int, aes(x = x, y = y))
+
+```
+
+```{r}
+library(dplyr)
+library(agricolae)
+library(ggplot2)
+
+early4 <- read_xlsx("4dpi/13_Rhizo.xlsx")
+early <- early4 %>% mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))  
+mid14 <- read_xlsx("17dpi_1/Root Summary.xlsx")
+mid1 <- mid14 %>% mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))  
+mid24 <- read_xlsx("17dpi_2/Winter Cohort 1 Rhizovision.xlsx")
+mid2 <- mid24 %>% mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))  
+late4 <- read_xlsx("26dpi/Fall Cohort2_Rhizovision data.xlsx")
+late <- late4 %>% mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G"))  
+
+```
+
+```{r}
+# Height plots
+#4dpi
+early.summarized = early %>% group_by(treatment) %>% summarize(height.max=max(`height (mm)`))
+ahsd=HSD.test(aov(`height (mm)`~treatment,data=early), "treatment", group=T)
+a <- early %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`height (mm)`)) + ylim(0,300) +
+  geom_boxplot(fill = colorlist)+geom_text(data=early.summarized,aes(x=treatment,y=10+height.max,label=ahsd$groups$groups),vjust=0)
+#17dpi
+mid1.summarized = mid1 %>% group_by(treatment) %>% summarize(height.max=max(`height (mm)`))
+bhsd=HSD.test(aov(`height (mm)`~treatment,data=mid1), "treatment", group=T)
+mid1.summarized$height.max[1] <- 150
+b <- mid1 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`height (mm)`)) + ylim(0,300) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid1.summarized,aes(x=treatment,y=10+height.max,label=c("b","a","ab","ab","a")),vjust=0) + scale_x_discrete(limits = levels(late$treatment))
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(height.max=max(`height (mm)`))
+chsd=HSD.test(aov(`height (mm)`~treatment,data=mid2), "treatment", group=T)
+c <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`height (mm)`)) + ylim(0,300) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes((x=fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")),y=10+height.max,label=chsd$groups$groups),vjust=0)
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(height.max=max(`height (mm)`))
+dhsd=HSD.test(aov(`height (mm)`~treatment,data=late), "treatment", group=T)
+chsd
+bhsd
+d <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`height (mm)`)) + ylim(0,300) +
+  geom_boxplot(fill = colorlist)+scale_x_discrete(limits = levels(late$treatment))+ geom_text(data=late.summarized,aes(x=treatment, y=10+height.max,label=c("b","bc","a","c","ab")),vjust=0)  
+d
+ggarrange(a,b,c,d,ncol=4,nrow=1)
+
+
+d
+cowplot::plot_grid(a + theme(axis.text.x = element_blank()),
+                   b + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()), 
+                   c + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()),
+                   d + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), 
+                             axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 0.5,
+                   labels = c("a","b","c","d"), scale = .92)
+```
+
+```{r}
+# Biomass
+
+#17dpi
+mid1.summarized = mid1 %>% group_by(treatment) %>% summarize(biomass.max=max(`dry biomass (g)`))
+hsd=HSD.test(aov(`dry biomass (g)`~treatment,data=mid1), "treatment", group=T)
+hsd
+f <- mid1 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`dry biomass (g)`)) + ylab("Total dry biomass (g)") +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid1.summarized,aes(x=treatment,y=0.3+biomass.max,label=c("ab","ab","a","c","bc")),vjust=0)
+
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(biomass.max=max(`root dry biomass (g)`))
+hsd=HSD.test(aov(`root dry biomass (g)`~treatment,data=mid2), "treatment", group=T)
+hsd
+g <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`root dry biomass (g)`)) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes(x=treatment,y=0.02+biomass.max,label=hsd$groups$groups),vjust=0)
+
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(biomass.max=max(`dry root biomass (g)`))
+hsd=HSD.test(aov(`dry root biomass (g)` ~ treatment, data=late), "treatment", group=T)
+hsd
+h <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`dry root biomass (g)`)) +
+  geom_boxplot(fill = colorlist)+geom_text(data=late.summarized,aes(x=treatment,y=0.02+biomass.max,label=c("bc","ab","a","c","ab")),vjust=0)
+
+c("","","","","")
+
+cowplot::plot_grid(f + theme(axis.text.x = element_blank()),
+                   f + theme(axis.text.x = element_blank()),
+                   g + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(), axis.text.x = element_blank()),
+                   h + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), 
+                             axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 0.5,
+                   labels = c("e","f","g","h"), scale = .92)
+
+cowplot::plot_grid(f,
+                   f,
+                   g,
+                   h,
+                   nrow=1,
+                   labels = c("e","f","g","h"), scale = .92)
+
+```
+
+```{r}
+#Network Area
+#4dpi
+early.summarized = early %>% group_by(treatment) %>% summarize(netarea.max=max(`network area (mm^2)`))
+ahsd=HSD.test(aov(`network area (mm^2)`~treatment,data=early), "treatment", group=T)
+i <- early %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`network area (mm^2)`)) + ylim(0,1200) +
+  geom_boxplot(fill = colorlist)+geom_text(data=early.summarized,aes(x=treatment,y=10+netarea.max,label=ahsd$groups$groups),vjust=0)
+i
+#17dpi
+mid1.summarized = mid1 %>% group_by(treatment) %>% summarize(netarea.max=max(`network area (mm^2)`))
+bhsd=HSD.test(aov(`network area (mm^2)`~ treatment,data=mid1), "treatment", group=T)
+j <- mid14 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`network area (mm^2)`)) + ylim(0,1200) +
+  geom_boxplot(fill = colorlist) +
+  geom_text(data=mid1.summarized,aes(x=treatment,y=10+netarea.max,label=bhsd$groups$groups),vjust=0)
+j
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(netarea.max=max(`network area (mm^2)`))
+chsd=HSD.test(aov(`network area (mm^2)`~treatment,data=mid2), "treatment", group=T)
+k <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`network area (mm^2)`)) + ylim(0,1200) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes(x=treatment,y=10+netarea.max,label=chsd$groups$groups),vjust=0)
+k
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(netarea.max=max(`network area (mm^2)`))
+dhsd=HSD.test(aov(`network area (mm^2)`~treatment,data=late), "treatment", group=T)
+l <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`network area (mm^2)`)) + ylim(0,1200) +
+  geom_boxplot(fill = colorlist) + geom_text(data=late.summarized,aes(x=treatment, y=10+netarea.max,label=dhsd$groups$groups),vjust=0)  
+l
+
+ahsd
+bhsd
+chsd
+dhsd
+
+cowplot::plot_grid(i + theme(axis.text.x = element_blank()),
+                   j + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()), 
+                   k + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()),
+                   l + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), 
+                             axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 0.5,
+                   labels = c("i","j","k","l"), scale = .92)
+```
+```{r}
+
+#Perimeter
+#4dpi
+early.summarized = early %>% group_by(treatment) %>% summarize(variable.max=max(`perimeter (mm)`))
+ahsd=HSD.test(aov(`perimeter (mm)`~treatment,data=early), "treatment", group=T)
+m <- early %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`perimeter (mm)`)) + ylim(0,3600) +
+  geom_boxplot(fill = colorlist)+geom_text(data=early.summarized,aes(x=treatment,y=10+variable.max,label=c("a","b","ab","ab","ab")),vjust=0)
+m
+#17dpi
+mid1.summarized = mid1 %>% group_by(treatment) %>% summarize(variable.max=max(`perimeter (mm)`))
+bhsd=HSD.test(aov(`perimeter (mm)`~ treatment,data=mid1), "treatment", group=T)
+mid1.summarized$height.max[1] <- 3500
+n <- mid1 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`perimeter (mm)`,group=treatment)) + ylim(0,3600) +
+  geom_boxplot(fill=colorlist) +
+  geom_text(data=mid1.summarized,aes(x=treatment,y=10+variable.max,label=c("a","ab","bc","c","a")),vjust=0)
+n
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(variable.max=max(`perimeter (mm)`))
+chsd=HSD.test(aov(`perimeter (mm)`~treatment,data=mid2), "treatment", group=T)
+o <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`perimeter (mm)`)) + ylim(0,3600) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes(x=treatment,y=10+variable.max,label=c("a","ab","ab","b","ab")),vjust=0)
+o
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(variable.max=max(`perimeter (mm)`))
+dhsd=HSD.test(aov(`perimeter (mm)`~treatment,data=late), "treatment", group=T)
+p <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`perimeter (mm)`)) + ylim(0,3600) +
+  geom_boxplot(fill =colorlist ) + geom_text(data=late.summarized,aes(x=treatment, y=10+variable.max,label=dhsd$groups$groups),vjust=0)  
+p
+
+ahsd
+bhsd
+chsd
+dhsd
+
+cowplot::plot_grid(m + theme(axis.text.x = element_blank()),
+                   n + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()), 
+                   o + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()),
+                   p + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), 
+                             axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 0.5,
+                   labels = c("m","n","o","p"), scale = .92)
+
+```
+
+```{r}
+#Surface Area
+early.summarized = early %>% group_by(treatment) %>% summarize(variable.max=max(`surface area (mm^2)`))
+ahsd=HSD.test(aov(`surface area (mm^2)`~treatment,data=early), "treatment", group=T)
+q <- early %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`surface area (mm^2)`)) + ylim(0,5500) +
+  geom_boxplot(fill = colorlist)+geom_text(data=early.summarized,aes(x=treatment,y=100+variable.max,label=c("a","a","a","a","a")),vjust=0)
+q
+#17dpi
+mid1.summarized = mid1 %>% group_by(treatment) %>% summarize(variable.max=max(`surface area (mm^2)`))
+bhsd=HSD.test(aov(`surface area (mm^2)`~ treatment,data=mid1), "treatment", group=T)
+mid1.summarized$variable.max[1] <- 5100
+r <- mid1 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`surface area (mm^2)`,group=treatment)) + ylim(0,5500) +
+  geom_boxplot(fill=colorlist) +
+  geom_text(data=mid1.summarized,aes(x=treatment,y=100+variable.max,label=c("ab","ab","ab","b","a")),vjust=0)
+r
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(variable.max=max(`surface area (mm^2)`))
+chsd=HSD.test(aov(`surface area (mm^2)`~treatment,data=mid2), "treatment", group=T)
+s <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`surface area (mm^2)`)) + ylim(0,5500) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes(x=treatment,y=100+variable.max,label=c("a","ab","ab","b","ab")),vjust=0)
+s
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(variable.max=max(`surface area (mm^2)`))
+dhsd=HSD.test(aov(`surface area (mm^2)`~treatment,data=late), "treatment", group=T)
+t <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`surface area (mm^2)`)) + ylim(0,5500) +
+  geom_boxplot(fill =colorlist ) + geom_text(data=late.summarized,aes(x=treatment, y=100+variable.max, label=c("ab","ab","a","b","ab")), vjust=0)  
+t
+
+ahsd
+bhsd
+chsd
+dhsd
+
+cowplot::plot_grid(q + theme(axis.text.x = element_blank()),
+                   r + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()), 
+                   s + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()),
+                   t + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), 
+                             axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 0.5,
+                   labels = c("q","r","s","t"), scale = .92)
+
+```
+
+```{r}
+
+#Volume
+early.summarized = early %>% group_by(treatment) %>% summarize(variable.max=max(`volume (mm^3)`))
+ahsd=HSD.test(aov(`volume (mm^3)`~treatment,data=early), "treatment", group=T)
+u <- early %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`volume (mm^3)`)) + ylim(0,4000) +
+  geom_boxplot(fill = colorlist)+geom_text(data=early.summarized,aes(x=treatment,y=100+variable.max,label=c("a","a","a","a","a")),vjust=0)
+u
+#17dpi
+mid1.summarized = mid1 %>% group_by(treatment) %>% summarize(variable.max=max(`volume (mm^3)`))
+bhsd=HSD.test(aov(`volume (mm^3)`~ treatment,data=mid1), "treatment", group=T)
+mid1.summarized$variable.max[1] <- 2000
+v <- mid1 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`volume (mm^3)`,group=treatment)) + ylim(0,4000) +
+  geom_boxplot(fill=colorlist) +
+  geom_text(data=mid1.summarized,aes(x=treatment,y=100+variable.max,label=c("a","a","a","a","a")),vjust=0)
+v
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(variable.max=max(`volume (mm^3)`))
+chsd=HSD.test(aov(`volume (mm^3)`~treatment,data=mid2), "treatment", group=T)
+w <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`volume (mm^3)`)) + ylim(0,4000) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes(x=treatment,y=100+variable.max,label=c("a","ab","ab","b","ab")),vjust=0)
+w
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(variable.max=max(`volume (mm^3)`))
+dhsd=HSD.test(aov(`volume (mm^3)`~treatment,data=late), "treatment", group=T)
+x <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`volume (mm^3)`)) + ylim(0,4000) +
+  geom_boxplot(fill =colorlist ) + geom_text(data=late.summarized,aes(x=treatment, y=100+variable.max, label=c("bc","abc","a","c","ab")), vjust=0)  
+x
+
+ahsd
+bhsd
+chsd
+dhsd
+
+cowplot::plot_grid(u + theme(axis.text.x = element_blank()),
+                   v + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()), 
+                   w + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()),
+                   x + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), 
+                             axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 0.5,
+                   labels = c("u","v","w","x"), scale = .92)
+
+
+```
+
+```{r}
+ggarrange(a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x, nrow=6, ncol=4)
+
+
+
+```
+
+```{r}
+# root to shoot ratio
+#17dpi
+mid2.summarized = mid2 %>% group_by(treatment) %>% summarize(variable.max=max(`root to shoot ratio`))
+chsd=HSD.test(aov(`root to shoot ratio`~treatment,data=mid2), "treatment", group=T)
+y <- mid2 %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`root to shoot ratio`)) + ylim(0,0.35) +
+  geom_boxplot(fill = colorlist)+geom_text(data=mid2.summarized,aes(x=treatment,y=0.1+variable.max,label=c("a","a","a","a","a")),vjust=0)
+y
+#26dpi
+late.summarized = late %>% group_by(treatment) %>% summarize(variable.max=max(`root to shoot ratio`))
+dhsd=HSD.test(aov(`root to shoot ratio`~treatment,data=late), "treatment", group=T)
+z <- late %>%
+  mutate(treatment = fct_relevel(treatment, "mock control", "wildtype F13", "mutant F13 1E G802K", "wildtype GHu", "mutant GHu 1E K802G")) %>%
+  ggplot(.,aes(x=treatment,y=`root to shoot ratio`)) + ylim(0,0.35) +
+  geom_boxplot(fill =colorlist ) + geom_text(data=late.summarized,aes(x=treatment, y=0.1+variable.max, label=c("a","a","a","a","a")), vjust=0)  
+z
+
+cowplot::plot_grid(y + theme(axis.text.x = element_blank()),
+                   z + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()), y + theme(axis.text.x = element_blank()),
+                   z + theme(axis.text.y = element_blank(),
+                                    axis.ticks.y = element_blank(),
+                                    axis.title.y = element_blank(), axis.text.x = element_blank()),
+                   nrow=1, rel_heights = 1,
+                   labels = c("y","z","y","z"), scale = .92)
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+

@@ -1,0 +1,122 @@
+---
+title: "root titer"
+author: "Brandon Roy"
+date: "2023-01-29"
+output: html_document
+---
+
+```{r}
+#load packages
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(rstatix)
+library(readxl)
+library(multcompView)
+library(ggiraphExtra)
+#import dataset
+root_titer <- read_excel("root titer.xlsx")
+#modify to factoral list
+root_titer$dpi <- as.factor(root_titer$dpi)
+# specify treatment wise comparisons
+my_comparisons <- list(c(2,5),c(2,4),c(3,5),c(2,3), c(3,4),c(4,5))
+my_comparisons2 <- list(c(2,4),c(2,5))
+my_comparisons3 <- list(c(2,5),c(3,4))
+
+colorlist <- c('#8d96a3','#00798c','light blue','#d1495b','orange')
+colorlist2 <- c('#8d96a3','#d1495b','#00798c','light blue','orange')
+colorlist3 <- c('#8d96a3','light blue','#00798c','orange','#d1495b')
+
+root_titer$Treatment <- factor(root_titer$Treatment, levels = c('control', 'wildtype F13', 'mutant F13 1E G802K', 'wildtype GHu','mutant GHu 1E K802G'))
+```
+
+```{r}
+
+ggboxplot(root_titer, "Treatment", "log", color = "dpi", fill= c(colorlist,colorlist),
+ palette = c("black", "grey")) + stat_compare_means(label = 'p.signif', method ='t.test', ref.group = "Control", hide.ns = F)
+
+ggplot(root_titer, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + stat_compare_means(label = 'identity',method ='wilcox.test', comparisons = my_comparisons, geom=T, hide.ns=T, label.y = c(6.5, 7.25)) + 
+  ylab("") + 
+  xlab("Viral treatment") + ylim(0,8) +
+  theme(aspect.ratio = 1.5, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+  
+ggplot(root_titer, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + 
+  ylab("") + stat_compare_means(label = 'identity',method ='wilcox.test', comparisons = my_comparisons2, geom=T, hide.ns=T, label.y = c(6.5, 7.25)) +
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.9, text=element_text(size=15)) +
+  theme(axis.text.x = element_text()) 
+ggplot(root_titer, aes(x=Treatment, y=log), fill= colorlist) + stat_boxplot(fill=c(colorlist,colorlist)) + facet_wrap(root_titer$dpi) + theme_bw() + 
+  ylab("") +
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.9, text=element_text(size=15))
+
+
+ggplot(root_titer, aes(x=dpi, y=log), fill= colorlist) + stat_boxplot(fill=c(c('#8d96a3','#8d96a3','#00798c','#00798c','light blue','light blue','#d1495b','#d1495b', 'orange','orange'))) + facet_wrap(root_titer$dpi) + theme_bw() + stat_compare_means(method ='wilcox.test', size=3, label.y=7.5, hide.ns=T) + 
+  ylab("") + 
+  xlab("") + ylim(0,8) +
+  theme(aspect.ratio = 1.9, text=element_text(size=11.25)) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1)) +
+  facet_wrap(~Treatment, ncol=5)
+
+```
+
+```{r}
+
+
+
+ggboxplot(ToothGrowth, x = "dose", y = "len",
+          color = "dose", palette = "npg")+
+# Add pairwise comparisons p-value
+stat_compare_means(comparisons = my_comparisons, label.y = c(29, 35, 40))+
+stat_compare_means(label.y = 45)     # Add global Anova p-value
+
+anno_df = compare_means(log ~ Treatment, group.by = "dpi", data = root_titer) 
+
+ggplot(root_titer, aes(x=dpi, y=log, fill=Treatment)) +
+  stat_summary(fun=mean, geom="bar", colour="black", alpha=1) +
+  stat_summary(fun.data = mean_se, geom = "errorbar", width=0.25) +
+  geom_point(color="black", shape=21, show.legend=TRUE, size=3, stroke=1) +
+  facet_wrap(~dpi) +
+  geom_signif(data = anno_df, aes(x=Treatment,
+                                  annotations=p.signif,
+                                  y_position = 6),
+              manual = TRUE) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_y_continuous(expand = expansion(mult = c(0.2, 0.2)))
+
+
+
+```
+
+```{r}
+
+#correlation analysis of root titer to leaf traits
+#only uses wildtype GHu individuals because this is the only symptomatic infection pairing
+
+root_titer2 <- read_excel("leaf_symptoms_root_titer.xlsx")
+
+model <- lm(`log(2^(-∆∆CT))` ~ `days showing symptoms`, data=root_titer2)
+summary(model)
+
+ggplot(root_titer2, aes(x=`days showing symptoms`, y=`log(2^(-∆∆CT))`)) + 
+  geom_point() +
+  geom_smooth(method=lm) + 
+  theme(text = element_text(size = 20), axis.text = element_text(size = 16), aspect.ratio = 0.4)
+  
+
+
+
+ggplot(GHu_Summary2, aes(x=`days showing symptoms`, y=`number of root tips`)) + 
+  geom_point() +
+  geom_smooth(method=lm)
+
+```
+
+```{r}
+
+
+
+```
+
