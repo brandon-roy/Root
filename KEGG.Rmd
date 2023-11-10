@@ -1,0 +1,189 @@
+---
+title: "KEGG Analysis"
+author: "Brandon G Roy"
+date: "2023-08-23"
+output: html_document
+---
+
+```{r}
+if (!requireNamespace("BiocManager", quietly = TRUE)) 
+         install.packages("BiocManager")
+
+BiocManager::install("clusterProfiler")
+BiocManager::install("enrichplot")
+BiocManager::install("pathview")
+install.packages("data.table")
+
+library(BiocManager)
+library(clusterProfiler)
+library(enrichplot)
+library(data.table)
+library(xlsx)
+```
+
+```{r}
+# get the necessary information from the eggNOG output file
+
+# read the data
+eggnog_data <- read.csv("out.emapper.annotations (3).csv", header = TRUE)
+#get columns 1 (query) and 9 (KO terms)
+kegg_data <- eggnog_data[c(1,4)]
+
+# clean up by removing the "ko:" in front of every KO term
+kegg_data$KEGG_ko <- gsub("ko:", "", as.character(kegg_data$KEGG_ko))
+
+# expand, since some genes/proteins will have multiple assigned KO terms
+kegg <- data.table(kegg_data)
+kegg <- kegg[, list(KEGG_ko = unlist(strsplit(KEGG_ko , ","))), by = query]
+
+# select the needed columns
+kegg_final <- kegg[,c(2,1)]
+kegg_final2 <- kegg[,c(1,2)]
+write.csv(kegg_final2, "kegg_Niben_annotation.csv", row.names = F)                         
+# finally you need a list of gene/protein names of interest (only the     # identifiers). Here, this is called protein_ids. It can be a vector or a # column in a data.frame. This can be a list of differentially expressed   # genes or the genes present in a cluster of module that is experimentall # interesting to you.
+```
+
+```{r}
+
+enr_reswt4 <- enricher(ghuwtvsctrl04_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_reswt4, showCategory=30, label_format=30, title="GHu WT vs Mock Control 4 dpi KEGG Enrichment")
+enr_reswt <- enricher(ghuwtvsctrl17_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_reswt, showCategory=30, label_format=30, title="GHu WT vs Mock Control 17 dpi KEGG Enrichment")
+enr_reswt26 <- enricher(ghuwtvsctrl26_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_reswt26, showCategory=30, label_format=30, title="GHu WT vs Mock Control 26 dpi KEGG Enrichment")
+
+enrichplot::emapplot(enr_reswt, title="GHu WT vs Mock Control 17 dpi KEGG Enrichment")
+
+barplot(enr_reswt4)
+barplot(enr_reswt)
+barplot(enr_reswt26)
+mutate(enr_reswt4, qscore = -log(p.adjust, base=10)) %>% 
+    barplot(x="qscore")
+mutate(enr_reswt, qscore = -log(p.adjust, base=10)) %>% 
+    barplot(x="qscore")
+mutate(enr_reswt26, qscore = -log(p.adjust, base=10)) %>% 
+    barplot(x="qscore")
+
+
+contrast_KEGG <- list(enr_reswt4, enr_reswt, enr_reswt26)
+KEGG_plot_main <- Reduce(function(x,y) merge(x,y, all=TRUE), contrast_KEGG, accumulate=FALSE)
+#ggplot(data = KEGG_plot_main, aes(x = condition, y = name, 
+                        color = p.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 40, vjust = 1, hjust = 1), text = element_text(size=12))
+barplot(KEGG_plot_main, height=count)
+mutate(KEGG_plot_main, qscore = -log(p.adjust, base=10)) %>% 
+    barplot(x="qscore")
+
+
+#enr_resmut4 <- enricher(ghumutvsctrl04_enrich, TERM2GENE=kegg_final, pvalueCutoff = 1, pAdjustMethod = "BH", qvalueCutoff = 1, minGSSize = 10)
+#enrichplot::dotplot(enr_resmut4, showCategory=30, label_format=30, title="GHu Mutant vs Mock Control 4 dpi KEGG Enrichment")
+enr_resmut <- enricher(ghumutvsctrl17_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_resmut, showCategory=30, label_format=30, title="GHu Mutant vs Mock Control 17 dpi KEGG Enrichment")
+enr_resmut26 <- enricher(ghumutvsctrl26_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_resmut26, showCategory=30, label_format=30, title="GHu Mutant vs Mock Control 26 dpi KEGG Enrichment")
+
+
+
+enr_reswm4 <- enricher(ghuwtvsmut4_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_reswm4, showCategory=30, label_format=30, title="GHu WT vs GHu Mutant 4 dpi KEGG Enrichment")
+enr_reswm17 <- enricher(ghuwtvsmut17_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_reswm17, showCategory=30, label_format=30, title="GHu WT vs GHu Mutant 17 dpi KEGG Enrichment")
+enr_reswm26 <- enricher(ghuwtvsmut26_enrich, TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+enrichplot::dotplot(enr_reswm26, showCategory=30, label_format=30, title="GHu WT vs GHu Mutant 26 dpi KEGG Enrichment")
+
+#enr_res <- enrichMKEGG(ghuwtvsmut7_enrich, keytype="kegg",TERM2GENE=kegg_final, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.2, minGSSize = 10)
+
+
+```
+
+```{r}
+library(enrichplot)
+cnetplot(enr_res, cex_label_gene=0.5)
+
+# write the results of the analysis
+x <- as.table(enr_res) # write table
+
+head(enr_res)
+
+bitr_kegg("K00799", "kegg", "Path", "ko") -> x
+ko2name(x$Path) -> y
+merge(x, y, by.x='Path', by.y='ko')
+
+
+setReadable(enr_res)
+
+# make a simple dot plot of the results and save it as a .tiff file
+tiff(file="KO_dotplot.tiff",width=6, height=4, units="in", res=1200)
+enrichplot::dotplot(enr_reswt, showCategory=30, label_format=30)
+gwm7s$data$Description <- ko2name(as.character(gwm7s$data$ID))[2]
+
+ko2name(as.character(gwm7s$data$ID))
+ko2name("ko:K01602")
+autoplot(gwm7s)
+
+library(pathview)
+viewKEGG(enr_res)
+
+dev.off()
+```
+
+```{r}
+library("pathview")
+library(readr)
+library(dplyr)
+download.kegg(pathway.id = "04070", species = "nta")
+
+# convert gene IDs to KEGG IDs first
+
+korg
+
+kegg_final %>% filter(ghuwtvsctrl04_enrich %in% query)
+
+as.(ghuwtvsctrl04_enrich)
+semi_join(ghuwtvsctrl04_enrich, kegg_final)
+
+select_KO <- kegg_final$KEGG_ko[kegg_final$query %in% ghuwtvsctrl04_enrich]
+
+pi3k <- pathview(gene.data  = select_KO, gene.idtype = "KEGG", cpd.data = kegg_final, pathway.id = "nta04070", species= "nta", id.type = ,)
+
+gene.annotpkg
+data(gene.idtype.list);gene.idtype.list
+data(paths.nat)
+
+```
+
+```{r}
+# read the data
+eggnog_data2 <- read.csv("out.emapper.annotations (2).csv", header = TRUE)
+#get columns 1 (query) and 9 (KO terms)
+GO_data <- eggnog_data2[c(1,2)]
+
+# clean up by removing the "ko:" in front of every KO term
+#GO_data$GOs <- gsub("ko:", "", as.character(kegg_data$KEGG_ko))
+
+# expand, since some genes/proteins will have multiple assigned KO terms
+NGO <- data.table(GO_data)
+NGO <- NGO[, list(GOs = unlist(strsplit(GOs , ","))), by = query]
+head(NGO)
+
+library(GO.db)
+goterms <- Term(GOTERM)
+term2name <- data.frame("GOID"=names(goterms),"term"=goterms )
+head(term2name)
+```
+
+```{r}
+enr_res <- enrichGO(ghuwtvsmut7_enrich, TERM2GENE = NGO, TERM2NAME = term2name, pvalueCutoff = 0.05, pAdjustMethod = "BH", qvalueCutoff = 0.05, minGSSize = 10)
+```
+
+```{r}
+
+```
+
+

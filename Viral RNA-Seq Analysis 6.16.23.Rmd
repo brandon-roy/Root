@@ -1,0 +1,279 @@
+---
+title: "Viral RNA-Seq Analysis"
+author: "Brandon Roy"
+date: "05/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#load packages and dependencies
+library(BiocManager)
+BiocManager::install("DESeq2")
+library(DESeq2) # main RNA-Seq analysis pipeline
+library(pheatmap)
+library(PCAtools)
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(goseq)
+library(ggpubr)
+library(tidyr)
+library(dplyr)
+library(Rmisc)
+library(grid)
+library(gridExtra)
+library(lemon)
+library(purrr)
+library(rnaseqGene)
+library(IHW)
+library(ggrepel)
+library(multiClust) # generating hierarchal clustering
+library(glmGamPoi)
+library(pcaExplorer)
+library(iSEE)
+library(tidyverse)
+library(ggh4x)
+library(cowplot)
+```
+
+```{r Gene Counting from individual files, eval=FALSE, include=FALSE}
+#import necessary files
+metadata <- read.table("Sample_metadata.txt", header = TRUE)
+
+# assemble gene counts from featureCounts into single matrix
+library(purrr)
+f_files<- list.files("./viralfeatureCounts", full.names = T)
+print(f_files)
+read_in_feature_counts<- function(file){
+  cnt<- read_tsv(file, col_names=T, comment='#')
+  cnt<- cnt %>% dplyr::select(-Chr, -Start, -End, -Strand, -Length)
+  return(cnt)
+}
+raw_counts<- map(f_files, read_in_feature_counts)
+raw_counts_df<- purrr::reduce(raw_counts,inner_join)
+
+# all counts are in one matrix and can be manipulated # now write to file
+write.table(raw_counts_df, file = "viralgeneCountroot.txt", row.names = F, col.names = F)
+raw_counts_df <- read.table(file= "viralgeneCountroot.txt")
+```
+
+# All files must be read in and assigned for input into DESeq2 analysis
+
+```{r}
+# Assign files
+matrixFileV <- "viralgeneCountroot.txt"
+sampleFileV <- "Sample_metadata.txt"
+
+#Input file manipulation
+VoriginalmatrixFile <- read.delim(matrixFileV,header=FALSE,sep = " ")
+VcleanedmatrixFile <- VoriginalmatrixFile[!duplicated(VoriginalmatrixFile$V1), ]
+Vcts <- data.frame(VcleanedmatrixFile[,-1], row.names=VcleanedmatrixFile[,1])
+
+Vcoldata <- read.delim("Sample_metadata.txt", sep='\t',row.names=1,header=TRUE )
+colnames(Vcts) <- rownames(Vcoldata)
+
+#Test whether rownames of coldata match colnames of cts
+all(rownames(Vcoldata) == colnames(Vcts)) #should return true
+
+# Adding a column 'group' to represent interaction of treatment*time:
+Vcoldata$group <- factor(paste0(Vcoldata$Treatment, Vcoldata$Time))
+
+#Set up factor type for everything except time:
+Vcoldata$Time <- as.factor(Vcoldata$Time)
+Vcoldata$Treatment <- as.factor(Vcoldata$Treatment)
+Vcoldata$group <- as.factor(Vcoldata$group)
+
+```
+
+```{r, eval=T}
+
+# Deseq2 model construction: (design = ~ Treatment + Time + Interaction)
+dds <- DESeqDataSetFromMatrix(countData = Vcts, colData = Vcoldata, design = ~1 + group)
+
+# Run DeSeq2
+dds_out <- DESeq(dds)
+
+
+# Transformation
+cts_vst <- assay(dds_out)
+cts_vst <- as.data.frame(t(cts_vst))
+datExpr0 <- as.matrix(cts_vst)
+
+plotPCA(vsd, intgroup = "Treatment")
+pca_results <- plotPCA(vsd, intgroup = c('Treatment','Time'), ntop=1000, returnData=TRUE)
+pca_results
+ggplot(pca_results, aes(x=PC1,y=PC2,color=Treatment,shape=Time)) + geom_point(size=3)
+
+barplot(colSums(Vcts), las=2, cex.axis=0.75, col = c("#000000","#000000","#000000","#000000","#000000","#eb8060", "#eb8060","#eb8060","#eb8060","#eb8060","#b9e38d","#b9e38d","#b9e38d","#b9e38d","#b9e38d", "#a1e9f0","#a1e9f0","#a1e9f0","#a1e9f0","#a1e9f0","#d9b1f0","#d9b1f0","#d9b1f0","#d9b1f0","#d9b1f0"))
+barplot(rowSums(cts_vst), las=2, cex.lab=0.25, col = c("#000000","#000000","#000000","#000000","#000000","#eb8060", "#eb8060","#eb8060","#eb8060","#eb8060","#b9e38d","#b9e38d","#b9e38d","#b9e38d","#b9e38d", "#a1e9f0","#a1e9f0","#a1e9f0","#a1e9f0","#a1e9f0","#d9b1f0","#d9b1f0","#d9b1f0","#d9b1f0","#d9b1f0"))
+```
+
+```{r}
+
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+
+Viral.Reads.Table <- read.csv("~/OneDrive - Cornell University/Research/Omics/RNA-Seq Project/Viral Reads Table.csv")
+Viral.Reads.Table$group <- factor(paste0(Viral.Reads.Table$Treatment, Viral.Reads.Table$Time..dpi.))
+
+ggboxplot(data=Viral.Reads.Table, x='Time..dpi.', y='Normalized.RNA2', ylab = "Normalized GFLV-RNA2 Counts", xlab="Days post inoculation", fill="Treatment", palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right")
+
+ggboxplot(data=Viral.Reads.Table, y='Normalized.RNA2', ylab = "Normalized GFLV-RNA2 Counts", xlab="Days post inoculation", fill="Treatment", palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right") + facet_wrap('Time..dpi.')
+
+
+
+ggplot(data=Viral.Reads.Table, aes(x=Treatment,y=Normalized.RNA2, col=Treatment)) + geom_line() + facet_wrap('Time..dpi.')
+
+```
+```{r}
+
+# Anova on all data
+one.way <- aov(Normalized.RNA2 ~ Treatment + Time..dpi., data=Viral.Reads.Table)
+summary(one.way)
+
+
+# Extract out only time point 7
+viral.reads.table7 <- filter(Viral.Reads.Table, Time..dpi. == 7)
+
+oneway7 <- aov(Normalized.RNA2 ~ Treatment, data = viral.reads.table7)
+summary(oneway7)
+
+plot(oneway7)
+# The model generated does not assume homoscedasticity, have to follow a Kruskall Wallis test
+
+ggboxplot(viral.reads.table7, x="Treatment", y="Normalized.RNA2")
+kruskal7 <- kruskal.test(Normalized.RNA2 ~ Treatment, data = viral.reads.table7)
+kruskal7
+# The Kruskal-Wallis test rejects the null hypothesis (p-value=0.008216), two or more treatments are statistically different from each other.
+
+pwc <- dunn_test(Normalized.RNA2 ~ Treatment, p.adjust.method="holm", data=viral.reads.table7)
+pwc
+# The Dunn test only results in the control treatment being statistically different from two of the viral treatment groups.
+
+pwc2 <- wilcox_test(Normalized.RNA2 ~ Treatment, p.adjust.method="holm", data=viral.reads.table7)
+pwc2
+
+pwc <- pwc %>% add_xy_position(x = "Treatment")
+
+
+viral.reads.table7 %>% group_by(Treatment) %>% shapiro_test(Normalized.RNA2)
+ggqqplot(viral.reads.table7, x="Normalized.RNA2", facet.by="Treatment")
+viral.reads.table7 %>% levene_test(Normalized.RNA2 ~ Treatment)
+stat.test <- viral.reads.table7 %>% t_test(Normalized.RNA2 ~ Treatment) %>% add_significance()
+stat.test <- stat.test %>% add_xy_position(x= "Treatment")
+ggboxplot(viral.reads.table7, x="Treatment", y="Normalized.RNA2", ylab = "GFLV-RNA2 Titer (TPKM)", xlab = "Treatment", add= "jitter", repel=TRUE, fill="Treatment",palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.6) + theme(axis.text.x = element_text(angle=45, hjust=1), aspect.ratio = 0.6) + stat_pvalue_manual(stat.test, tip.length = 0.1,hide.ns=TRUE) + labs(subtitle = get_test_label(stat.test, detailed = TRUE))
+
+stat.test.transcriptomics <- Viral.Reads.Table %>%
+  group_by(Time..dpi.) %>%
+  t_test(Normalized.RNA2 ~ Treatment) %>%
+  adjust_pvalue(method = "holm") %>%
+  add_significance()
+stat.test.transcriptomics <- stat.test.transcriptomics %>% add_xy_position(fun='max',x='Treatment')
+ggboxplot(data=Viral.Reads.Table, x='Treatment', y='Normalized.RNA2', ylab = "GFLV-RNA2 Titer (TPKM)", xlab = F, facet.by='Time..dpi.', panel.labs.background = list('light green'), fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8,ylim=c(0,100000)) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position =  'none' )+ stat_pvalue_manual(stat.test.transcriptomics, hide.ns = T, remove.bracket = F, y.position = 90000, step.increase = .1)
+
+#ggboxplot(data=Viral.Reads.Table, x='Treatment', y='Normalized.RNA2', ylab = "GFLV-RNA2 Titer (TPKM)", xlab = F, facet.by='Time..dpi.', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position ="top")
+
+```
+
+
+```{r}
+# For 4dpi titer comparison
+viral.reads.table4 <- filter(Viral.Reads.Table, Time..dpi. == 4)
+viral.reads.table4 %>% group_by(Treatment) %>% shapiro_test(Normalized.RNA2)
+ggqqplot(viral.reads.table4, x="Normalized.RNA2", facet.by="Treatment")
+viral.reads.table4 %>% levene_test(Normalized.RNA2 ~ Treatment)
+stat.test4 <- viral.reads.table4 %>% t_test(Normalized.RNA2 ~ Treatment) %>% add_significance()
+stat.test4 <- stat.test4 %>% add_xy_position(x= "Treatment")
+ggboxplot(viral.reads.table4, x="Treatment", y="Normalized.RNA2", ylab = "GFLV Titer (TPM)", xlab = "Treatment", add= "jitter", repel=TRUE, fill="Treatment",palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.6) + theme(axis.text.x = element_text(angle=45, hjust=1),aspect.ratio=0.6) + stat_pvalue_manual(stat.test4, tip.length = 0.1,hide.ns=TRUE) + labs(subtitle = get_test_label(stat.test4, detailed = TRUE))
+
+# For 12dpi titer comparison
+viral.reads.table12 <- filter(Viral.Reads.Table, Time..dpi. == 12)
+viral.reads.table12 %>% group_by(Treatment) %>% shapiro_test(Normalized.RNA2)
+ggqqplot(viral.reads.table12, x="Normalized.RNA2", facet.by="Treatment")
+viral.reads.table12 %>% levene_test(Normalized.RNA2 ~ Treatment)
+stat.test12 <- viral.reads.table12 %>% t_test(Normalized.RNA2 ~ Treatment) %>% add_significance()
+stat.test12 <- stat.test12 %>% add_xy_position(x= "Treatment")
+ggboxplot(viral.reads.table12, x="Treatment", y="Normalized.RNA2", ylab = "GFLV Titer (TPKM)", xlab = "Treatment", add= "jitter", repel=TRUE, fill="Treatment",palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.6) + theme(axis.text.x = element_text(angle=45, hjust=1),aspect.ratio=0.6) + stat_pvalue_manual(stat.test12, tip.length = 0.1,hide.ns=TRUE) + labs(subtitle = get_test_label(stat.test12, detailed = TRUE))
+
+
+```
+
+#Viral titer with proteomics data
+```{r}
+
+library(readr)
+library(janitor)
+viralprotein <- read_csv("viralprotein.csv")
+viralproteinr <- as.data.frame(viralprotein)
+viralproteinre <- as.data.frame(t(viralproteinr)) 
+viralproteinrea <- viralproteinre %>% row_to_names(row_number = 1)
+viralproteinread <- as.data.frame(viralproteinrea)
+
+viralproteinreads <- lapply(viralproteinread,as.numeric)
+viralproteinreads2 <- as.data.frame(viralproteinreads)
+
+protein_expdesign
+viralproteinreads2$Group <- as.factor(protein_expdesign$group)
+viralproteinreads2$time  <- as.factor(protein_expdesign$time)
+viralproteinreads2$Treatment <- as.factor(protein_expdesign$treatment)
+viralproteinreads2
+
+
+ggboxplot(data=viralproteinreads2, x='time', y='Sum.1E', ylab = "Normalized GFLV-2C Coat Protein Peptide Counts", xlab="Days post inoculation", fill="Treatment", alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right")
+
+ggboxplot(data=viralproteinreads2, x='time', y='Sum.1E', ylab = "Normalized GFLV-2C Coat Protein Peptide Counts", xlab="Days post inoculation", fill="Treatment", alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right")
+
+ggboxplot(data=viralproteinreads2, x='time', y='Sum.1E', ylab = "Normalized GFLV-2C Coat Protein Peptide Counts", xlab="Days post inoculation", fill="Treatment", alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right")
+
+ggboxplot(data=Viral.Reads.Table, x='Time..dpi.', y='Normalized.RNA2', ylab = "Normalized GFLV-RNA2 Counts", xlab="Days post inoculation", fill="Treatment", palette = c('limegreen','lightblue','blue','magenta','red'), alpha=0.70, width=0.7) + theme(aspect.ratio= 1, axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), legend.position = "right")
+
+
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Sum.1E', ylab = "GFLV-1E Peptide Counts",facet.by='time', xlab = F, fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position = "none")
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Sum.2B', ylab = "GFLV-2B Peptide Counts", xlab = F, facet.by='time', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position = "none")
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Sum.2C', ylab = "GFLV-2C Peptide Counts", xlab = F, facet.by='time', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position = "none")
+
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.1E', ylab = "GFLV-1E Peptide Counts / Tryspin Counts", xlab = F, facet.by='time', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position =  'none')
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.2B', ylab = "GFLV-2B Peptide Counts  / Tryspin Counts", xlab = F, facet.by='time', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position ="none")
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.2C', ylab = "GFLV-2C Peptide Counts  / Tryspin Counts", xlab = F, facet.by='time', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position = "none")
+
+plot_grid(plotlist = c(norm1E,norm2B,norm2C),nrow=3,ncol=3)
+
+ggboxplot(data=Viral.Reads.Table, x='Treatment', y='Normalized.RNA2', ylab = "GFLV-RNA2 Titer (TPKM)", xlab = F, facet.by='Time..dpi.', fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position ="top")
+
+
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.1E') +facet_wrap(vars(time))
+```
+```{r}
+stat.test.pro.1E <- viralproteinreads2 %>%
+  group_by(time) %>%
+  t_test(Normalized.Sum.1E ~ Treatment) %>%
+  adjust_pvalue(method = "hochberg") %>%
+  add_significance()
+stat.test.pro.1E <- stat.test.pro.1E %>% add_xy_position(x='Treatment')
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.1E', ylab = "GFLV-1E Peptide Counts / Tryspin Counts", xlab = F, facet.by='time', panel.labs.background = list('violet'),fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position =  'none')+ stat_pvalue_manual(stat.test.pro.1E, label= 'p.adj.signif', hide.ns = T, remove.bracket = T)
+
+
+stat.test.pro.2B <- viralproteinreads2 %>%
+  group_by(time) %>%
+  t_test(Normalized.Sum.2B ~ Treatment) %>%
+  adjust_pvalue(method = "hochberg") %>%
+  add_significance()
+stat.test.pro.2B <- stat.test.pro.2B %>% add_xy_position(x="Treatment")
+Bplot <- ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.2B', ylab = "GFLV-2B Peptide Counts  / Tryspin Counts", xlab = F, facet.by='time', panel.labs.background = list('violet'), fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position ="none")
+Bplot + stat_pvalue_manual(stat.test.pro.2B, label= 'p.adj.signif', hide.ns = T, remove.bracket = T)
+
+stat.test.pro.2C <- viralproteinreads2 %>%
+  group_by(time) %>%
+  t_test(Normalized.Sum.2C ~ Treatment) %>%
+  adjust_pvalue(method = "hochberg") %>%
+  add_significance()
+stat.test.pro.2C <- stat.test.pro.2C %>% add_xy_position(x='Treatment')
+ggboxplot(data=viralproteinreads2, x='Treatment', y='Normalized.Sum.2C', ylab = "GFLV-2C Peptide Counts  / Tryspin Counts", xlab = F, facet.by='time', panel.labs.background = list('violet'),fill='Treatment',palette = c('limegreen','lightblue','blue','magenta','red'),alpha=0.70, width=0.8) + theme(axis.text.x= element_blank(), axis.ticks.x= element_blank(), legend.position = "none") + stat_pvalue_manual(stat.test.pro.2B, label= 'p.adj.signif', hide.ns = T, remove.bracket = T)
+
+
+
+
+
+```
+

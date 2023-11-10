@@ -1,0 +1,1295 @@
+---
+title: "Gene probing RNA-Seq"
+author: "Brandon Roy"
+date: "2022-09-15"
+output: html_document
+---
+
+```{r}
+#load packages and dependencies
+library(BiocManager)
+library(DESeq2) # main RNA-Seq analysis pipeline
+library(pheatmap)
+library(PCAtools)
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(goseq)
+library(ggpubr)
+library(tidyr)
+library(dplyr)
+library(WGCNA) # network analysis
+library(wesanderson)
+library(Rmisc)
+library(grid)
+library(gridExtra)
+library(lemon)
+library(purrr)
+library(rnaseqGene)
+library(IHW)
+library(ggrepel)
+library(multiClust) # generating hierarchal clustering
+library(glmGamPoi)
+library(pcaExplorer)
+library(iSEE)
+library(DescTools)
+library(ggiraphExtra)
+```
+
+```{r}
+# Deseq2 model construction: (design = ~ Treatment + Time + Interaction)
+dds <- DESeqDataSetFromMatrix(countData = cts, colData = coldata, design = ~1 + group)
+keep <- rowSums(counts(dds)) >= 75
+dds <- dds[keep,]
+
+# Run DeSeq2
+dds_out <- DESeq(dds)
+print("Group comparison outputs of DESeq2 model:")
+print(resultsNames(dds_out))
+print("Dispersion Estimates of Counts")
+plotDispEsts(dds_out)
+
+# Transformation
+vsd <- vst(dds_out)
+vsd
+#plotDispEst(vsd)
+cts_vst <- assay(vsd)
+cts_vst <- as.data.frame(t(cts_vst))
+datExpr0 <- as.matrix(cts_vst)
+```
+
+```{r}
+cab1 <- plotCounts(dds_out_root, gene = "Niben101Scf12382g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+cab2 <- plotCounts(dds_out_root, gene = "Niben101Scf12382g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(cab1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Chlorophyll a-b binding protein 40")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(cab2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Chlorophyll a-b binding protein 40")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+ps1 <- plotCounts(dds_out_root, gene = "Niben101Scf05824g13008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ps1_2 <- plotCounts(dds_out_root, gene = "Niben101Scf01797g03034", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(ps1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Photosystem I reaction center subunit psaK")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(ps1_2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Photosystem I reaction center subunit psaK 2")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# "Carbonic anhydrases have been identified as SA binding proteins that function in antioxidant roles for viral infection"
+carb <- plotCounts(dds_out_root, gene = "Niben101Scf09253g00011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(carb, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Carbonic Anhydrase")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+```
+
+```{r}
+# 
+psII <- plotCounts(dds_out_root, gene = "Niben101Scf01116g01004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(psII, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Photosystem II 10kDa polypeptide")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+Rub <- plotCounts(dds_out_root, gene = "Niben101Scf05368g03015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+Rub2 <- plotCounts(dds_out_root, gene = "Niben101Scf08488g02011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(Rub, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Rubisco, Niben101Scf05368g03015")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(Rub2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Rubisco2, Niben101Scf08488g02011")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+AGO1b <- plotCounts(dds_out_root, gene = "Niben101Scf08137g02022", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(AGO1b, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO1B, Niben101Scf08137g02022")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# RDR
+RdRP1 <- plotCounts(dds_out_root, gene = "Niben101Scf02929g02029", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+RdRP2 <- plotCounts(dds_out_root, gene = "Niben101Scf01797g02013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+RdRP3 <- plotCounts(dds_out_root, gene = "Niben101Scf12714g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+RdRP4 <- plotCounts(dds_out_root, gene = "Niben101Scf12609g01010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+RdRP5 <- plotCounts(dds_out_root, gene = "Niben101Scf03832g02004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+
+#ggdotplot(RdRP1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Family RdRP")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(RdRP2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="RDR1")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(RdRP3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="RDR2")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(RdRP4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="RDR6")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(RdRP5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="RDR6")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(RdRP6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="RDR6")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+Hen <- plotCounts(dds_out_root, gene = "Niben101Scf01061g08028", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+hen1 <- plotCounts(dds_out_root, gene = "Niben101Scf01395g01004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SRDN <- plotCounts(dds_out_root, gene = "Niben101Scf04071g06014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SRDN3 <- plotCounts(dds_out_root, gene = "Niben101Scf04953g04001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+
+
+ggdotplot(Hen, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="HEN1, Niben101Scf01061g08028")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(hen1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="HEN1, Niben101Scf01395g01004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(Hen, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SRDN3, Niben101Scf04071g06014")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(hen1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SRDN3, Niben101Scf04953g04001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+ROS <- plotCounts(dds_out_root, gene = "Niben101Scf13036g01001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ROS1 <- plotCounts(dds_out_root, gene = "Niben101Scf06769g02004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ROS2 <- plotCounts(dds_out_root, gene = "Niben101Scf14076g00012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ROS3 <- plotCounts(dds_out_root, gene = "Niben101Scf07368g00011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(ROS, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS1, Niben101Scf13036g01001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(ROS1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS1, Niben101Scf06769g02004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(ROS2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS3, Niben101Scf14076g00012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(ROS3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS3, Niben101Scf07368g00011")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+xs1 <- plotCounts(dds_out_root, gene = "Niben101Scf10900g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+xh1 <- plotCounts(dds_out_root, gene = "Niben101Scf03545g00005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+xh2 <- plotCounts(dds_out_root, gene = "Niben101Scf01054g13007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(xs1, x="Time", y="count", color="Treatment", palette = c('#8d96a3', 'orange', '#d1495b'), title="XS domain protein, Niben101Scf10900g00002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=20))
+ggdotplot(xh1, x="Time", y="count", color="Treatment", palette = c('#8d96a3', 'orange', '#d1495b'), title="XH/XS domain protein, Niben101Scf03545g00005")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=20))
+ggdotplot(xh2, x="Time", y="count", color="Treatment", palette = c('#8d96a3', 'orange', '#d1495b'), title="XH/XS domain protein, Niben101Scf01054g13007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=20))
+# Protein defective in meristem silencing
+pdm <- plotCounts(dds_out_root, gene = "Niben101Scf08455g00014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#pdm1 <- plotCounts(dds_out_root, gene = "Niben101Scf03292g00006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#pdm2 <- plotCounts(dds_out_root, gene = "Niben101Scf03292g00007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(pdm, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS3, Niben101Scf07368g00011")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+```
+
+
+
+```{r}
+# DICER Proteins
+#D1 <- plotCounts(dds_out_root, gene = "Niben101Scf06666g01009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D2 <- plotCounts(dds_out_root, gene = "Niben101Scf08516g00009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D3 <- plotCounts(dds_out_root, gene = "Niben101Scf01789g02041", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D4 <- plotCounts(dds_out_root, gene = "Niben101Scf00576g02004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#D5 <- plotCounts(dds_out_root, gene = "Niben101Scf01789g02038", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D6 <- plotCounts(dds_out_root, gene = "Niben101Scf01789g02039", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D7 <- plotCounts(dds_out_root, gene = "Niben101Scf12094g00014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D8 <- plotCounts(dds_out_root, gene = "Niben101Scf12090g00003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+D9 <- plotCounts(dds_out_root, gene = "Niben101Scf06666g01001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(D2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 4 (Niben101Scf08516g00009.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(D6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 4 (Niben101Scf01789g02039.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(D7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 1 (Niben101Scf01789g02039.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(D3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 4 (Niben101Scf01789g02039.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(D4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 4 (Niben101Scf01789g02039.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(D8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 1 (Niben101Scf01789g02039.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(D9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Dicer-like protein 4 (Niben101Scf01789g02039.1)") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf08516g00009")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf01789g02039")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf12094g00014")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "")
+#eIF1
+
+# Transporters
+Tport <- plotCounts(dds_out_root, gene = "Niben101Scf04343g01005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(Tport, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Transporter, Niben101Scf04343g01005") + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+Kport <- plotCounts(dds_out_root, gene = "Niben101Scf02837g07020", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(Kport, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Potassium Transporter, Niben101Scf02837g07020")+ ylim(0,100) + theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+hasty1 <- plotCounts(dds_out_root, gene = "Niben101Scf09234g03022", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(hasty1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+hasty2 <- plotCounts(dds_out_root, gene = "Niben101Scf04396g01011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(hasty2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+serrate1 <- plotCounts(dds_out_root, gene = "Niben101Scf00862g00016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+serrate2 <- plotCounts(dds_out_root, gene = "Niben101Scf04558g02001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+serrate1a <- plotCounts(dds_out_root, gene = "Niben101Scf13188g00012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+serrate2a <- plotCounts(dds_out_root, gene = "Niben101Scf09348g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(serrate1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Serrate Effector Protein, Niben101Scf00862g00016")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(serrate2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Serrate Effector Protein, Niben101Scf04558g02001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(serrate1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ASR2/Serrate Effector Protein, Niben101Scf13188g00012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(serrate2a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ASR2/Serrate Effector Protein, Niben101Scf09348g00004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "") 
+```
+
+```{r}
+#SGS
+SGS1 <- plotCounts(dds_out_root, gene = "Niben101Scf05419g00006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SGS2 <- plotCounts(dds_out_root, gene = "Niben101Scf05468g10025", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SGS3 <- plotCounts(dds_out_root, gene = "Niben101Scf00058g08006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SGS4 <- plotCounts(dds_out_root, gene = "Niben101Scf03714g04011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SGS5 <- plotCounts(dds_out_root, gene = "Niben101Scf03392g08005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+SGS6 <- plotCounts(dds_out_root, gene = "Niben101Scf05920g02002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(SGS1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SGS3, Niben101Scf05419g00006")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(SGS2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SGS3, Niben101Scf05468g10025")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(SGS3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SGS3 homolog, Niben101Scf00058g08006")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(SGS4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SGS-like protein, Niben101Scf03714g04011")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(SGS5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SGS3, Niben101Scf03392g08005")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(SGS6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SGS-like protein, Niben101Scf05920g02002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf05419g00006")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf05468g10025")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf00058g08006")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf03714g04011")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf03392g08005")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf05920g02002")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "")
+```
+
+```{r}
+#C2H2 Zn-finger protein serrate (rather low counts across entire transcriptome)
+C1 <- plotCounts(dds_out_root, gene = "Niben101Scf01694g11001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C2 <- plotCounts(dds_out_root, gene = "Niben101Scf02801g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C3 <- plotCounts(dds_out_root, gene = "Niben101Scf06186g07017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C4 <- plotCounts(dds_out_root, gene = "Niben101Scf03471g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C5 <- plotCounts(dds_out_root, gene = "Niben101Scf05554g09013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C6 <- plotCounts(dds_out_root, gene = "Niben101Scf00595g03001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C7 <- plotCounts(dds_out_root, gene = "Niben101Scf03565g01003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C8 <- plotCounts(dds_out_root, gene = "Niben101Scf06113g00019", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C9 <- plotCounts(dds_out_root, gene = "Niben101Scf05411g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C10 <- plotCounts(dds_out_root, gene = "Niben101Scf00126g04006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C11 <- plotCounts(dds_out_root, gene = "Niben101Scf00858g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C12 <- plotCounts(dds_out_root, gene = "Niben101Scf01826g02015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+C13 <- plotCounts(dds_out_root, gene = "Niben101Scf00176g05002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+Ccounts <- cbind(C1$count,C2$count,C3$count,C4$count,C5$count,C6$count,C7$count,C8$count,C9$count,C10$count,C11$count,C12$count,C13$count)
+
+ggdotplot(C1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf01694g11001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf02801g00001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C10, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C11, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C12, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(C13, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+```
+
+```{r}
+
+e <- plotCounts(dds_out_root, gene = "Niben101Scf04225g02007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(e, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Translation initiation factor IF-2, Niben101Scf04225g02007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# eIF2 beta subunit is severely upregulated at all times for GHu WT 
+#e <- plotCounts(dds_out_root, gene = "Niben101Scf08006g01044", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e1 <- plotCounts(dds_out_root, gene = "Niben101Scf07168g01004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e2 <- plotCounts(dds_out_root, gene = "Niben101Scf08665g01019", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e3 <- plotCounts(dds_out_root, gene = "Niben101Scf01240g06009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e4 <- plotCounts(dds_out_root, gene = "Niben101Scf00262g05007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(e1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 beta subunit, Niben101Scf07168g01004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 beta subunit, Niben101Scf08665g01019")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 beta subunit, Niben101Scf01240g06009")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 beta subunit, Niben101Scf00262g05007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf00262g05007")
+
+# eIF2 gamma
+#eg <- plotCounts(dds_out_root, gene = "Niben101Scf01927g05014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(eg, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 gamma subunit")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# eIF2 delta is upregulated for GHu WT 7dpi
+ed <- plotCounts(dds_out_root, gene = "Niben101Scf18156g00010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(ed, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 delta subunit")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ed <- plotCounts(dds_out_root, gene = "Niben101Scf18156g00009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(ed, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf18156g00010")
+
+
+
+# PATHOGEN RELATED (PR-1)
+pr <- plotCounts(dds_out_root, gene = "Niben101Scf00952g03003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(pr, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Glutamine synthetase PR-1, Niben101Scf00952g03003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf00952g03003")
+
+# Hypersensitive response related genes
+pr1 <- plotCounts(dds_out_root, gene = "Niben101Scf02494g10012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+pr2 <- plotCounts(dds_out_root, gene = "Niben101Scf00593g03002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+pr3 <- plotCounts(dds_out_root, gene = "Niben101Scf05166g07012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(pr1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf02494g10012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(pr2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf00593g03002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(pr3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf05166g07012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == c("Niben101Ctg12264g00001","Niben101Scf00133g04021"))
+```
+
+```{r}
+
+# eIF2 alpha subunit
+eaa <- plotCounts(dds_out_root, gene = "Niben101Ctg12264g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+eab <- plotCounts(dds_out_root, gene = "Niben101Scf00133g04021", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+eac <- plotCounts(dds_out_root, gene = "Niben101Scf03412g05020", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ead <- plotCounts(dds_out_root, gene = "Niben101Scf01681g10001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(eaa, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit, Niben101Ctg12264g00001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(eab, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit, Niben101Scf00133g04021")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(eac, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit, Niben101Scf03412g05020")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(ead, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit, Niben101Scf01681g10001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+#ea <- plotCounts(dds_out_root, gene = "Niben101Scf00133g04002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(ea, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ea <- plotCounts(dds_out_root, gene = "Niben101Ctg07850g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(ea, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ea <- plotCounts(dds_out_root, gene = "Niben101Scf00773g14024", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(ea, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF2 alpha subunit")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == c("Niben101Ctg12264g00001","Niben101Scf00133g04021") | rownames(ghuwtvsmut7) == c("Niben101Scf03412g05020","Niben101Scf01681g10001"))
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == )
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == 'Niben101Scf03412g05020')
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == 'Niben101Scf01681g10001')
+```
+
+```{r}
+#eIF1 alpha subunit is upregulated at 7dpi for GHu WT
+e1a <- plotCounts(dds_out_root, gene = "Niben101Scf01990g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e1a1 <- plotCounts(dds_out_root, gene = "Niben101Scf05584g03009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e1a2 <- plotCounts(dds_out_root, gene = "Niben101Scf02300g00026", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e1a3 <- plotCounts(dds_out_root, gene = "Niben101Scf00447g02008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+
+ggdotplot(e1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit, Niben101Scf01990g00001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e1a1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit, Niben101Scf05584g03009")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e1a2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit, Niben101Scf02300g00026")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e1a3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit, Niben101Scf00447g02008")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+e1a <- plotCounts(dds_out_root, gene = "Niben101Scf08954g01004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(e1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#e1a <- plotCounts(dds_out_root, gene = "Niben101Scf15381g00013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(e1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+e1a <- plotCounts(dds_out_root, gene = "Niben101Scf01576g00010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(e1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#e1a <- plotCounts(dds_out_root, gene = "Niben101Scf09241g00005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(e1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+e1a <- plotCounts(dds_out_root, gene = "Niben101Scf00470g07001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(e1a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="eIF1 alpha subunit")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf02300g00026")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf00447g02008")
+```
+```{r}
+
+# Silencing defective 5 - very low counts for all
+sde5a <- plotCounts(dds_out_root, gene = "Niben101Scf02463g01011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+sde5b <- plotCounts(dds_out_root, gene = "Niben101Ctg10142g00003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+sde5c <- plotCounts(dds_out_root, gene = "Niben101Scf01959g06014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(sde5a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(sde5b, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(sde5c, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# Co-IP genes identified in 2021 osterbaan paper
+#Niben101Scf03607g00009
+#Niben101Scf06128g00004
+#Niben101Scf01006g03016
+#Niben101Scf01814g05011
+#Niben101Scf04225g02007
+#Niben101Scf00593g01002
+
+
+if2 <- plotCounts(dds_out_root, gene = "Niben101Scf04225g02007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+set <- plotCounts(dds_out_root, gene = "Niben101Scf03607g00009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+bsub <- plotCounts(dds_out_root, gene = "Niben101Scf06128g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+wd <- plotCounts(dds_out_root, gene = "Niben101Scf01814g05011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+dynamin <- plotCounts(dds_out_root, gene = "Niben101Scf01006g03016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+atpase <- plotCounts(dds_out_root, gene = "Niben101Scf00593g01002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(if2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Translation initiation factor IF-2")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(set, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(bsub, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(wd, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(dynamin, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(atpase, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+```
+
+```{r}
+
+serk <- plotCounts(dds_out_root, gene = "Niben101Scf00140g02007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(serk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SERK1")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+serk <- plotCounts(dds_out_root, gene = "Niben101Scf02513g11003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(serk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SERK2")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#serk <- plotCounts(dds_out_root, gene = "Niben101Ctg05148g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(serk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SERK4")+
+#theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+serk <- plotCounts(dds_out_root, gene = "Niben101Scf00821g16001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(serk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SERK1")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#serk <- plotCounts(dds_out_root, gene = "Niben101Scf04406g07003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(serk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SERK2")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+# Reactive oxygen species modulators
+ros <- plotCounts(dds_out_root, gene = "Niben101Scf05201g00003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(ros, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS Modulator 1, Niben101Scf05201g00003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ros <- plotCounts(dds_out_root, gene = "Niben101Scf12320g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(ros, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="ROS Modulator 1, Niben101Scf12320g02003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ros <- plotCounts(dds_out_root, gene = "Niben101Scf00735g06024", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(ros, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Ozone-repsonsive stress related protein, Niben101Scf00735g06024")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsctrl17 %>% filter(rownames(ghuwtvsctrl17) == "Niben101Scf05201g00003")
+ghuwtvsctrl17 %>% filter(rownames(ghuwtvsctrl17) == "Niben101Scf12320g02003")
+
+```
+
+```{r}
+
+mpk <- plotCounts(dds_out_root, gene = "Niben101Scf07276g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(mpk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+mpk <- plotCounts(dds_out_root, gene = "Niben101Scf17849g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(mpk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+mpk <- plotCounts(dds_out_root, gene = "Niben101Scf02171g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(mpk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+mpk <- plotCounts(dds_out_root, gene = "Niben101Scf10990g00014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(mpk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+mpk <- plotCounts(dds_out_root, gene = "Niben101Scf07030g08004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(mpk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# AGO proteins are upregulated across all strains compared to control
+agoa <- plotCounts(dds_out_root, gene = "Niben101Scf07678g07011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agob<- plotCounts(dds_out_root, gene = "Niben101Scf01571g04001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoc <- plotCounts(dds_out_root, gene = "Niben101Scf00887g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agod <- plotCounts(dds_out_root, gene = "Niben101Scf08137g02022", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoe <- plotCounts(dds_out_root, gene = "Niben101Scf05146g06007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agof <- plotCounts(dds_out_root, gene = "Niben101Scf05245g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agog <- plotCounts(dds_out_root, gene = "Niben101Scf07937g03024", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoh <- plotCounts(dds_out_root, gene = "Niben101Scf05519g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoi <- plotCounts(dds_out_root, gene = "Niben101Scf23735g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoj <- plotCounts(dds_out_root, gene = "Niben101Scf06788g00019", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agop <- plotCounts(dds_out_root, gene = "Niben101Scf06396g00010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoq <- plotCounts(dds_out_root, gene = "Niben101Scf05964g00003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agor <- plotCounts(dds_out_root, gene = "Niben101Scf02159g01018", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agos <- plotCounts(dds_out_root, gene = "Niben101Scf10560g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agot <- plotCounts(dds_out_root, gene = "Niben101Scf06396g00011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agou <- plotCounts(dds_out_root, gene = "Niben101Scf02159g01017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agov <- plotCounts(dds_out_root, gene = "Niben101Scf04371g04008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agok <- plotCounts(dds_out_root, gene = "Niben101Scf00811g07018", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agow <- plotCounts(dds_out_root, gene = "Niben101Scf00272g02007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agox <- plotCounts(dds_out_root, gene = "Niben101Scf20224g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ago <- plotCounts(dds_out_root, gene = "Niben101Scf02159g01016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agol <- plotCounts(dds_out_root, gene = "Niben101Scf10638g02001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agom <- plotCounts(dds_out_root, gene = "Niben101Scf03814g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agon <- plotCounts(dds_out_root, gene = "Niben101Scf11262g01008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoy <- plotCounts(dds_out_root, gene = "Niben101Scf01240g11006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoo <- plotCounts(dds_out_root, gene = "Niben101Scf04553g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+#ago <- plotCounts(dds_out_root, gene = "Niben101Scf25181g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+agoz <- plotCounts(dds_out_root, gene = "Niben101Scf04447g01001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ago <- plotCounts(dds_out_root, gene = "Niben101Ctg01781g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+
+ggdotplot(agoa, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO1, Niben101Scf07678g07011")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agob, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO1, Niben101Scf01571g04001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoc, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" AGO1B, Niben101Scf00887g01007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agod, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO1B, Niben101Scf08137g02022")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoe, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO1B, Niben101Scf05146g06007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agof, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO2, Niben101Scf05245g01007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agog, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO4, Niben101Scf07937g03024")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoh, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO4, Niben101Scf05519g01007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoi, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO4, Niben101Scf23735g00004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoj, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" AGO4, Niben101Scf06788g00019")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agok, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO6, Niben101Scf00811g07018")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agol, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO10, Niben101Scf10638g02001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agom, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO10, Niben101Scf03814g00001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agon, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO10, Niben101Scf11262g01008")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoo, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="AGO10, Niben101Scf04553g00001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ggdotplot(agop, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoq, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agor, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agos, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agot, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agou, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agov, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agow, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agox, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoy, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(agoz, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+# silencing defective mutants
+# nothing good
+sde5 <- plotCounts(dds_out_root, gene = "Niben101Scf02463g01011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+sde2 <- plotCounts(dds_out_root, gene = "Niben101Scf08112g01016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+sde2_1 <- plotCounts(dds_out_root, gene = "Niben101Scf03952g03008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(sde5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SDE5, Niben101Scf02463g01011")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(sde2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SDE2, Niben101Scf08112g01016")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(sde2_1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="SDE2, Niben101Scf03952g03008")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+# dsRNA binding protein
+
+drb1 <- plotCounts(dds_out_root, gene = "Niben101Scf06376g01010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+drb2 <- plotCounts(dds_out_root, gene = "Niben101Scf09861g01014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+drb3 <- plotCounts(dds_out_root, gene = "Niben101Scf07054g04012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+drb4 <- plotCounts(dds_out_root, gene = "Niben101Scf05841g01021", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#drb5 <- plotCounts(dds_out_root, gene = "Niben101Scf05841g01011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#drb <- plotCounts(dds_out_root, gene = "Niben101Scf01181g02012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(drb1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="DRB4, Niben101Scf06376g01010")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(drb2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="DRB4, Niben101Scf09861g01014")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(drb3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="DRB4, Niben101Scf07054g04012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(drb4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="DRB4, Niben101Scf05841g01021")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(drb5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="DRB4, Niben101Scf05841g01021")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf06376g01010")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf09861g01014")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf07054g04012")
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf05841g01021")
+# miRNA TOUGH/TGH
+tgh <- plotCounts(dds_out_root, gene = "Niben101Scf11303g01002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tgh2 <- plotCounts(dds_out_root, gene = "Niben101Scf01764g02024", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tgh2a <- plotCounts(dds_out_root, gene = "Niben101Scf06778g04005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(tgh, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="TGH X isoform")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(tgh2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="TGH/TOUGH")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#tgh <- plotCounts(dds_out_root, gene = "Niben101Scf02115g05003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(tgh, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="TGH X isoform")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(tgh2a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="TGH/TOUGH")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+```
+
+
+```{r}
+rosa <- plotCounts(dds_out_root, gene = "Niben101Scf01154g12010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosb <- plotCounts(dds_out_root, gene = "Niben101Scf02261g01002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rosc <- plotCounts(dds_out_root, gene = "Niben101Scf03722g00009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosd <- plotCounts(dds_out_root, gene = "Niben101Scf10840g01010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rose <- plotCounts(dds_out_root, gene = "Niben101Scf07158g00025", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rosf <- plotCounts(dds_out_root, gene = "Niben101Scf10840g01016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rosg <- plotCounts(dds_out_root, gene = "Niben101Scf12954g02008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosh <- plotCounts(dds_out_root, gene = "Niben101Scf00369g05010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rosi <- plotCounts(dds_out_root, gene = "Niben101Scf12954g02010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rosj <- plotCounts(dds_out_root, gene = "Niben101Scf01596g11003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosk <- plotCounts(dds_out_root, gene = "Niben101Scf02581g04013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosl <- plotCounts(dds_out_root, gene = "Niben101Scf07345g00016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosm <- plotCounts(dds_out_root, gene = "Niben101Scf06385g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosn <- plotCounts(dds_out_root, gene = "Niben101Scf05682g00014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#roso <- plotCounts(dds_out_root, gene = "Niben101Scf09262g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosp <- plotCounts(dds_out_root, gene = "Niben101Scf06461g09016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#rosq <- plotCounts(dds_out_root, gene = "Niben101Scf06739g01006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rosr <- plotCounts(dds_out_root, gene = "Niben101Scf06739g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ross <- plotCounts(dds_out_root, gene = "Niben101Scf02437g06007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rost <- plotCounts(dds_out_root, gene = "Niben101Scf00482g03012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(rosa, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHA, Niben101Scf01154g12010")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosb, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHA, Niben101Scf02261g01002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosd, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHA, Niben101Scf10840g01010")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosh, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHB, Niben101Scf00369g05010")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHC, Niben101Scf02581g04013")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosl, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHC, Niben101Scf07345g00016")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosm, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHE, Niben101Scf06385g01007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosn, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHE, Niben101Scf05682g00014")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosp, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHE, Niben101Scf06461g09016")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rosr, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHE, Niben101Scf06739g01007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(ross, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHE, Niben101Scf02437g06007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(rost, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="NbRBOHF, Niben101Scf00482g03012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+#ROS Generation			
+	sp|Q948U0|RBOHA_SOLTU	****	Respiratory burst oxidase homolog protein A
+	sp|Q948U0|RBOHA_SOLTU	*-**	Respiratory burst oxidase homolog protein A 
+	#sp|Q948U0|RBOHA_SOLTU	*-**	Respiratory burst oxidase homolog protein A 
+	sp|Q948U0|RBOHA_SOLTU	***-	Respiratory burst oxidase homolog protein A 
+	#sp|Q948U0|RBOHA_SOLTU	*-*-	Respiratory burst oxidase homolog protein A
+	#sp|Q948U0|RBOHA_SOLTU	*-**	Respiratory burst oxidase homolog protein A
+	#sp|Q948T9|RBOHB_SOLTU	*-**	Respiratory burst oxidase homolog protein B
+	sp|Q948T9|RBOHB_SOLTU	****	Respiratory burst oxidase homolog protein B
+	sp|Q948T9|RBOHB_SOLTU	*-**	Respiratory burst oxidase homolog protein B
+	sp|O81210|RBOHC_ARATH	*-*-	Respiratory burst oxidase homolog protein C
+	sp|Q2HXL0|RBOHC_SOLTU	****	Respiratory burst oxidase homolog protein C
+	sp|Q2HXL0|RBOHC_SOLTU	*-**	Respiratory burst oxidase homolog protein C
+	sp|O81211|RBOHE_ARATH	****	Respiratory burst oxidase homolog protein E
+	sp|O81211|RBOHE_ARATH	****	Respiratory burst oxidase homolog protein E
+	sp|O81211|RBOHE_ARATH	****	Respiratory burst oxidase homolog protein E 
+	sp|O81211|RBOHE_ARATH	****	Respiratory burst oxidase homolog protein E
+	sp|O81211|RBOHE_ARATH	*-**	Respiratory burst oxidase homolog protein E
+	sp|O81211|RBOHE_ARATH	***-	Respiratory burst oxidase homolog protein E
+	sp|O81211|RBOHE_ARATH	*-**	Respiratory burst oxidase homolog protein E 
+	sp|O48538|RBOHF_ARATH	****	Respiratory burst oxidase homolog protein F 
+
+
+
+#l13 <- plotCounts(dds_out_root, gene = "Niben101Scf06954g03016", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(l13, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+l13a <- plotCounts(dds_out_root, gene = "Niben101Scf06980g00003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+l13b <- plotCounts(dds_out_root, gene = "Niben101Scf05767g04004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+l13c <- plotCounts(dds_out_root, gene = "Niben101Scf03432g00012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+l13d <- plotCounts(dds_out_root, gene = "Niben101Scf04528g05004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+l13e <- plotCounts(dds_out_root, gene = "Niben101Scf13099g00013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+l13f <- plotCounts(dds_out_root, gene = "Niben101Scf01171g06004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(l13a, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="60S ribosomal protein L13a-1, Niben101Scf06980g00003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(l13b, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="60S ribosomal protein L13a-4, Niben101Scf05767g04004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(l13c, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="60S ribosomal protein L13a-4, Niben101Scf03432g00012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(l13d, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="50S ribosomal protein L13, Niben101Scf04528g05004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(l13e, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="50S ribosomal protein L13, Niben101Scf13099g00013")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(l13f, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="50S ribosomal protein L13a-like, Niben101Scf01171g06004")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+ghuwtvsmut7 %>% filter(rownames(ghuwtvsmut7) == "Niben101Scf06980g00003")
+```
+```{r}
+# Interferon induced binding proteins and kinases
+inf1 <- plotCounts(dds_out_root, gene = "Niben101Scf03169g04007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+inf2 <- plotCounts(dds_out_root, gene = "Niben101Scf11552g01003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+inf3 <- plotCounts(dds_out_root, gene = "Niben101Scf00961g01018", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+inf4 <- plotCounts(dds_out_root, gene = "Niben101Scf03987g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+inf5 <- plotCounts(dds_out_root, gene = "Niben101Scf12159g09002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+inf6 <- plotCounts(dds_out_root, gene = "Niben101Scf05391g02002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+kin1 <- plotCounts(dds_out_root, gene = "Niben101Scf03427g07002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+kin2 <- plotCounts(dds_out_root, gene = "Niben101Scf04420g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+
+ggdotplot(inf1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="INF Binding Protein, Niben101Scf03169g04007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(inf2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="INF Binding Protein, Niben101Scf11552g01003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(inf3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="INF Binding Protein, Niben101Scf00961g01018")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(inf4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="INF Binding Protein, Niben101Scf03987g02003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(inf5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf12159g09002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(inf6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="INF Binding Protein, Niben101Scf05391g02002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(kin1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Kinase, Niben101Scf03427g07002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(kin2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Kinase, Niben101Scf04420g02003")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+#interferon <- plotCounts(dds_out_root, gene = "Niben101Scf01795g20002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(interferon, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#interferon <- plotCounts(dds_out_root, gene = "Niben101Scf01192g07005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(interferon, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+tps1 <- plotCounts(dds_out_root, gene = "Niben101Scf01580g02014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tps2 <- plotCounts(dds_out_root, gene = "Niben101Scf13167g00007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tps3 <- plotCounts(dds_out_root, gene = "Niben101Scf05057g06006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tps4 <- plotCounts(dds_out_root, gene = "Niben101Scf02792g03030", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tps5 <- plotCounts(dds_out_root, gene = "Niben101Scf02395g02002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(tps1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="tRNA pseudouridine synthase, Niben101Scf01580g02014")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(tps2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="tRNA pseudouridine synthase B, Niben101Scf13167g00007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(tps3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="tRNA pseudouridine synthase, Niben101Scf05057g06006")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(tps4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="tRNA pseudouridine synthase D, Niben101Scf02792g03030")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(tps5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="tRNA pseudouridine synthase B, Niben101Scf02395g02002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+
+in3p <- plotCounts(dds_out_root, gene = "Niben101Scf06016g08006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(in3p, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Inositol-3 phosphate synthase, Niben101Scf06016g08006")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+random <- plotCounts(dds_out_root, gene = "Niben101Scf33689g00006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(random, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf33689g00006")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+random <- plotCounts(dds_out_root, gene = "Niben101Scf01090g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(random, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+```
+
+
+```{r}
+# Coilin - a nuclear protein associated with recovery and attenuation of recovery - seems to be elevated in some regards for ghu wt 
+
+coilin1 <- plotCounts(dds_out_root, gene = "Niben101Scf04939g02015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+coilin2 <- plotCounts(dds_out_root, gene = "Niben101Scf04802g01014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(coilin1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(coilin2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+macro <- plotCounts(dds_out_root, gene = "Niben101Scf01409g10007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(macro, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+```
+
+```{r}
+
+# JAK Protein Kinase Upregulated GHu WT 7dpi
+tk2 <- plotCounts(dds_out_root, gene = "Niben101Scf09978g01017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(tk2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Tyrosine Kinase 2, Niben101Scf09978g01017")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+tk2 <- plotCounts(dds_out_root, gene = "Niben101Scf05368g06019", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(tk2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Tyrosine Kinase 2, ")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+tk2 <- plotCounts(dds_out_root, gene = "Niben101Scf00168g03001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(tk2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Tyrosine Kinase 2, ")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+tk2 <- plotCounts(dds_out_root, gene = "Niben101Scf00963g02006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(tk2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Tyrosine Kinase 2, ")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+tk2 <- plotCounts(dds_out_root, gene = "Niben101Scf02462g03003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(tk2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Tyrosine Kinase 2, ")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+tk2 <- plotCounts(dds_out_root, gene = "Niben101Scf05307g01005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(tk2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Tyrosine Kinase 2, ")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+```
+
+```{r}
+root1 <- plotCounts(dds_out_root, gene = "Niben101Scf08640g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Root meristem growth factor 6")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root2 <- plotCounts(dds_out_root, gene = "Niben101Scf02831g08015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Root hair defective 3 GTP-binding protein (RHD3),Niben101Scf02831g08015.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root3 <- plotCounts(dds_out_root, gene = "Niben101Scf06752g02003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein LATERAL ROOT PRIMORDIUM 1, Niben101Scf06752g02003.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root4 <- plotCounts(dds_out_root, gene = "Niben101Scf01993g03013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein root UVB sensitive 6, Niben101Scf01993g03013.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#root5 <- plotCounts(dds_out_root, gene = "Niben101Scf01505g02020", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(root5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), #title="Protein ROOT HAIR DEFECTIVE 3, Niben101Scf01505g02020.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, #hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root6 <- plotCounts(dds_out_root, gene = "Niben101Scf03502g00006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein root UVB sensitive 4, Niben101Scf03502g00006.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root7 <- plotCounts(dds_out_root, gene = "Niben101Scf04499g03002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Root hair defective 3 GTP-binding protein (RHD3), Niben101Scf04499g03002.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root8 <- plotCounts(dds_out_root, gene = "Niben101Scf04964g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein ROOT HAIR DEFECTIVE 3 homolog 2, Niben101Scf04964g00001.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root9 <- plotCounts(dds_out_root, gene = "Niben101Scf03562g04005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein root UVB sensitive 6, Niben101Scf03562g04005.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root10 <- plotCounts(dds_out_root, gene = "Niben101Scf02026g06001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root10, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="unknown protein INVOLVED IN: N-terminal protein myristoylation, Niben101Scf02026g06001.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root11 <- plotCounts(dds_out_root, gene = "Niben101Scf07593g03013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root11, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="aberrant lateral root formation 4, Niben101Scf07593g03013.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#root12 <- plotCounts(dds_out_root, gene = "Niben101Scf13429g04021", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#ggdotplot(root12, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), #title="Root meristem growth factor 6, Niben101Scf13429g04021.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, #hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root13 <- plotCounts(dds_out_root, gene = "Niben101Scf00034g04020", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root13, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein root UVB sensitive 4, Niben101Scf00034g04020.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root14 <- plotCounts(dds_out_root, gene = "Niben101Scf01065g02001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root14, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="aberrant lateral root formation 4, Niben101Scf01065g02001.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root15 <- plotCounts(dds_out_root, gene = "Niben101Scf02363g00010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root15, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Root hair defective 3 GTP-binding protein (RHD3) , Niben101Scf02363g00010.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root16 <- plotCounts(dds_out_root, gene = "Niben101Scf02156g06006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root16, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Root hair defective 3 GTP-binding protein (RHD3), Niben101Scf02156g06006.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root17 <- plotCounts(dds_out_root, gene = "Niben101Scf07226g05003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root17, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Protein root UVB sensitive 1, chloroplastic, Niben101Scf07226g05003.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root18 <- plotCounts(dds_out_root, gene = "Niben101Scf00228g02006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root18, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Auxin-induced in root cultures protein 12, Niben101Scf00228g02006.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+aux <- plotCounts(dds_out_root, gene = "Niben101Scf02971g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(aux, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Auxin")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+root19 <- plotCounts(dds_out_root, gene = "Niben101Scf01304g02008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root19, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Root hair defective 3 GTP-binding protein (RHD3), Niben101Scf01304g02008.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root20 <- plotCounts(dds_out_root, gene = "Niben101Scf05201g11005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root20, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" Protein LATERAL ROOT PRIMORDIUM 1, Niben101Scf05201g11005.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "right")
+
+root21 <- plotCounts(dds_out_root, gene = "Niben101Scf08975g02034", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root21, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" Protein root UVB sensitive 5, Niben101Scf08975g02034.1")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root22 <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root22, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" , ")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root23 <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root23, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" , ")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+root24 <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(root24, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=" , ")+ theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+#Root genes not present in leaf tissue for thresholds
+Niben101Scf01304g02008.1	Root hair defective 3 GTP-binding protein (RHD3) LENGTH=802
+Niben101Scf05201g11005.1	Protein LATERAL ROOT PRIMORDIUM 1
+#Niben101Scf01329g01004.1	Protein root UVB sensitive 5
+#Niben101Scf08975g02034.1	Protein root UVB sensitive 5
+#Niben101Scf04832g01005.1	unknown protein; LOCATED IN: endomembrane system; EXPRESSED IN: stem, inflorescence meristem, root, leaf; EXPRESSED DURING: LP.04 four leaves visible; Has 30201 Blast hits to 17322 proteins in 780 species: Archae - 12; Bacteria - 1396; Metazoa - 17338; Fungi - 3422; Plants - 5037; Viruses - 0; Other Eukaryotes - 2996 (source: NCBI BLink). LENGTH=352
+#Niben101Scf02199g01009.1	unknown protein; LOCATED IN: endomembrane system; EXPRESSED IN: stem, inflorescence meristem, root, leaf; EXPRESSED DURING: LP.04 four leaves visible; Has 30201 Blast hits to 17322 proteins in 780 species: Archae - 12; Bacteria - 1396; Metazoa - 17338; Fungi - 3422; Plants - 5037; Viruses - 0; Other Eukaryotes - 2996 (source: NCBI BLink). LENGTH=352
+#Niben101Scf02895g01003.1	Root hair defective 3 GTP-binding protein (RHD3) LENGTH=802
+#Niben101Scf01505g02031.1	Protein ROOT HAIR DEFECTIVE 3
+#Niben101Scf01505g02001.1	Root hair defective 3 GTP-binding protein (RHD3) LENGTH=795
+#Niben101Scf00047g03028.1	unknown protein; FUNCTIONS IN: molecular_function unknown; INVOLVED IN: biological_process unknown; LOCATED IN: endomembrane system; EXPRESSED IN: inflorescence meristem, hypocotyl, root, flower; EXPRESSED DURING: petal differentiation and expansion stage; Has 23 Blast hits to 23 proteins in 9 species: Archae - 0; Bacteria - 0; Metazoa - 0; Fungi - 0; Plants - 22; Viruses - 0; Other Eukaryotes - 1 (source: NCBI BLink). LENGTH=118
+#Niben101Scf07428g00012.1	Auxin-induced in root cultures protein 12
+#Niben101Scf01505g02019.1	Protein ROOT HAIR DEFECTIVE 3 homolog 1
+#Niben101Scf02363g00011.1	Root hair defective 3 GTP-binding protein (RHD3) isoform 2
+
+```
+
+```{r}
+
+# Resveratrol metabolite methyltransferase from 2021 paper for GFLV 
+#Niben101Scf33389g00001
+#Niben101Scf00110g02001
+#Niben101Scf03634g13006
+#Niben101Scf01284g00004
+
+rev1 <- plotCounts(dds_out_root, gene = "Niben101Scf33389g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rev2 <- plotCounts(dds_out_root, gene = "Niben101Scf00110g02001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rev3 <- plotCounts(dds_out_root, gene = "Niben101Scf03634g13006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+rev4 <- plotCounts(dds_out_root, gene = "Niben101Scf01284g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+Niben101Scf00304g01003.1
+Niben101Scf12609g01007.1
+Niben101Scf14688g00005.1
+Niben101Scf02891g00008.1
+Niben101Scf26023g00004.1
+Niben101Scf02112g02017.1
+Niben101Scf01233g00008.1
+Niben101Scf05588g10008.1
+Niben101Scf05588g10009.1
+Niben101Scf16663g00002.1
+Niben101Scf00304g02014.1
+Niben101Scf17776g00004.1
+```
+
+```{r}
+
+#lrr1 <- plotCounts(dds_out_root, gene = "Niben101Scf05368g06019", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#lrr2 <- plotCounts(dds_out_root, gene = "Niben101Scf00168g03001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+lrr3 <- plotCounts(dds_out_root, gene = "Niben101Scf09978g01017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#lrr4 <- plotCounts(dds_out_root, gene = "Niben101Scf00963g02006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#lrr5 <- plotCounts(dds_out_root, gene = "Niben101Scf02462g03003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+NADPH <- plotCounts(dds_out_root, gene = "Niben101Scf0258g04013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(NADPH, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf05368g06019")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+  
+Niben101Scf0258g04013.1
+#ggdotplot(lrr1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf05368g06019")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(lrr2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf00168g03001")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(lrr3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf09978g01017")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(lrr4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf00963g02006")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(lrr5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf02462g03003")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+unk <- plotCounts(dds_out_root, gene = "Niben101Scf01008g01008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+ggdotplot(unk, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title=", Niben101Scf01008g01008")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+tlr1 <- plotCounts(dds_out_root, gene = "Niben101Scf34945g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+tlr2 <- plotCounts(dds_out_root, gene = "Niben101Scf02391g00012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+```
+
+```{r}
+fourt1 <- plotCounts(dds_out_root, gene = "Niben101Scf00477g00017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf01397g00020", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt2 <- plotCounts(dds_out_root, gene = "Niben101Scf01980g12010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt3 <- plotCounts(dds_out_root, gene = "Niben101Scf02156g02008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt4 <- plotCounts(dds_out_root, gene = "Niben101Scf07381g02007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt5 <- plotCounts(dds_out_root, gene = "Niben101Scf04992g01011", intgroup=c('Time','Treatment'), normalized = T, returnData = T) # low counts
+fourt7 <- plotCounts(dds_out_root, gene = "Niben101Scf00189g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf01521g05005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt8 <- plotCounts(dds_out_root, gene = "Niben101Scf02537g14001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt9 <- plotCounts(dds_out_root, gene = "Niben101Scf05959g01005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt10 <- plotCounts(dds_out_root, gene = "Niben101Scf02367g04001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt11 <- plotCounts(dds_out_root, gene = "Niben101Scf18551g00017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf01082g03005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt12 <- plotCounts(dds_out_root, gene = "Niben101Scf06516g04018", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt13 <- plotCounts(dds_out_root, gene = "Niben101Scf03015g03010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf03338g01004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf04570g06004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt14 <- plotCounts(dds_out_root, gene = "Niben101Scf10757g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt15 <- plotCounts(dds_out_root, gene = "Niben101Scf08527g01006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Ctg14382g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt16 <- plotCounts(dds_out_root, gene = "Niben101Scf04475g00005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt17 <- plotCounts(dds_out_root, gene = "Niben101Scf02537g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt18 <- plotCounts(dds_out_root, gene = "Niben101Scf02366g06014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf03027g02009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#fourt <- plotCounts(dds_out_root, gene = "Niben101Scf02468g02011", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+fourt19 <- plotCounts(dds_out_root, gene = "Niben101Scf10278g01002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+
+ggdotplot(fourt1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(fourt5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+#ggdotplot(fourt6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+#  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt10, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt11, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt12, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt13, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt14, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt15, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt16, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt17, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt18, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(fourt19, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+```
+
+```{r}
+#inositol genes
+i1 <- plotCounts(dds_out_root, gene = "Niben101Scf10781g02007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i2 <- plotCounts(dds_out_root, gene = "Niben101Scf08149g01006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i3 <- plotCounts(dds_out_root, gene = "Niben101Scf08936g09004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i4 <- plotCounts(dds_out_root, gene = "Niben101Scf08936g09005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i5 <- plotCounts(dds_out_root, gene = "Niben101Scf02564g09002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i6 <- plotCounts(dds_out_root, gene = "Niben101Scf02249g05013", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i7 <- plotCounts(dds_out_root, gene = "Niben101Scf02348g11001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i8 <- plotCounts(dds_out_root, gene = "Niben101Scf00168g05002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i9 <- plotCounts(dds_out_root, gene = "Niben101Scf00168g05004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i10 <- plotCounts(dds_out_root, gene = "Niben101Scf05998g01005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i11 <- plotCounts(dds_out_root, gene = "Niben101Scf03351g04008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#i12 <- plotCounts(dds_out_root, gene = "Niben101Scf13742g00007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i13 <- plotCounts(dds_out_root, gene = "Niben101Scf02375g01012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i14 <- plotCounts(dds_out_root, gene = "Niben101Scf12433g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(i1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf10781g02007")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf08149g01006")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf02564g09002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf02348g11001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i11, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf03351g04008")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i13, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf02375g01012")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i14, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf12433g00002")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+i15 <- plotCounts(dds_out_root, gene = "Niben101Scf01326g10014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i16 <- plotCounts(dds_out_root, gene = "Niben101Scf25265g00010", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i17 <- plotCounts(dds_out_root, gene = "Niben101Scf02253g11001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i18 <- plotCounts(dds_out_root, gene = "Niben101Scf00128g05001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+i19 <- plotCounts(dds_out_root, gene = "Niben101Scf00339g05023", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(i15, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf01326g10014")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i16, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf25265g00010")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i17, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf25265g00010")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(i18, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf00128g05001")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "top")
+ggdotplot(i19, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="Niben101Scf00339g05023")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+Ethylene genes
+
+e1 <- plotCounts(dds_out_root, gene = "Niben101Scf00304g01003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e2 <- plotCounts(dds_out_root, gene = "Niben101Scf12609g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e3 <- plotCounts(dds_out_root, gene = "Niben101Scf14688g00005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e4 <- plotCounts(dds_out_root, gene = "Niben101Scf02891g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e5 <- plotCounts(dds_out_root, gene = "Niben101Scf26023g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e6 <- plotCounts(dds_out_root, gene = "Niben101Scf02112g02017", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#e <- plotCounts(dds_out_root, gene = "Niben101Scf01233g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e7 <- plotCounts(dds_out_root, gene = "Niben101Scf05588g10008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e8 <- plotCounts(dds_out_root, gene = "Niben101Scf05588g10009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e9 <- plotCounts(dds_out_root, gene = "Niben101Scf16663g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e10 <- plotCounts(dds_out_root, gene = "Niben101Scf00304g02014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e11 <- plotCounts(dds_out_root, gene = "Niben101Scf17776g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(e1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e10, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e11, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+# Phophoinositide phosphatase family protein
+
+r1 <- plotCounts(dds_out_root, gene = "Niben101Scf07763g02015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r2 <- plotCounts(dds_out_root, gene = "Niben101Scf00182g02012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r3 <- plotCounts(dds_out_root, gene = "Niben101Scf03776g00015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r4 <- plotCounts(dds_out_root, gene = "Niben101Scf01498g11008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r5 <- plotCounts(dds_out_root, gene = "Niben101Scf08407g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r6 <- plotCounts(dds_out_root, gene = "Niben101Scf01330g01004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r7 <- plotCounts(dds_out_root, gene = "Niben101Scf08683g00006", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r8 <- plotCounts(dds_out_root, gene = "Niben101Scf00508g10015", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r9 <- plotCounts(dds_out_root, gene = "Niben101Scf00343g09032", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+r10 <- plotCounts(dds_out_root, gene = "Niben101Scf09876g00009", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(r1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(r10, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+
+# subunit of mTOR is downregulated at 17dpi
+
+#e <- plotCounts(dds_out_root, gene = "Niben101Scf01418g00022", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e1 <- plotCounts(dds_out_root, gene = "Niben101Scf10224g00005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e2 <- plotCounts(dds_out_root, gene = "Niben101Scf05382g03008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(e1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(e2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+
+
+
+
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+e <- plotCounts(dds_out_root, gene = "", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+```
+```{r}
+# IAA/auxin synthesis
+a1 <- plotCounts(dds_out_root, gene = "Niben101Scf00470g00001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a2 <- plotCounts(dds_out_root, gene = "Niben101Scf00492g03001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a3 <- plotCounts(dds_out_root, gene = "Niben101Scf11178g02004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#a <- plotCounts(dds_out_root, gene = "Niben101Scf01604g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#a <- plotCounts(dds_out_root, gene = "Niben101Scf00503g03007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a4 <- plotCounts(dds_out_root, gene = "Niben101Scf07527g03002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a5 <- plotCounts(dds_out_root, gene = "Niben101Scf01083g00008", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a6 <- plotCounts(dds_out_root, gene = "Niben101Scf01192g08003", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a <- plotCounts(dds_out_root, gene = "Niben101Scf31173g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a7 <- plotCounts(dds_out_root, gene = "Niben101Scf22940g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a8 <- plotCounts(dds_out_root, gene = "Niben101Scf01076g00005", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a9 <- plotCounts(dds_out_root, gene = "Niben101Scf08687g00004", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a10 <- plotCounts(dds_out_root, gene = "Niben101Scf05584g01007", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a11 <- plotCounts(dds_out_root, gene = "Niben101Scf08321g06001", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#a <- plotCounts(dds_out_root, gene = "Niben101Scf03432g01012", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+a12 <- plotCounts(dds_out_root, gene = "Niben101Scf00817g00002", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+#a <- plotCounts(dds_out_root, gene = "Niben101Scf05133g01014", intgroup=c('Time','Treatment'), normalized = T, returnData = T)
+
+ggdotplot(a1, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a2, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a3, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a4, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a5, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a6, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a7, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a8, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a9, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a10, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a11, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+ggdotplot(a12, x="Time", y="count", color="Treatment", add = "mean_sd", palette = c('#8d96a3', 'orange', '#d1495b'), title="")+
+  theme(axis.text.x = element_text(angle = 0, vjust = 1, hjust=0.5, size=15), aspect.ratio = 2/1, legend.position = "")
+
+
+
+
+
+```
+

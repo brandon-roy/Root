@@ -1,0 +1,139 @@
+---
+title: "GO Analysis of Data"
+author: "Brandon Roy"
+date: "2023-06-08"
+output: html_document
+---
+
+```{r}
+# load necessary packages
+
+library(DESeq)
+library(BiocManager)
+BiocManager::install("clusterProfiler")
+library(clusterProfiler)
+library(dplyr)
+library(readr)
+library(AnnotationDbi)
+library(GO.db)
+library(gson)
+
+# import necessary files from leaf and root RNA-Seq analyses
+
+# outputGO.txt should be used for enricher() functions
+dataGO <- read_delim("outputGO.txt", delim = "\t", col_names = FALSE)
+
+#gseDO
+# extract a named vector of all terms
+goterms <- Term(GOTERM)
+#convert into a data frame
+term2name <- data.frame("gsid"=names(goterms), "name"= goterms)
+#load output data here
+output_data <- read.delim("outputGO.txt", header=TRUE)
+gsid2gene <- data.frame("gene"=output_data$gene_id,"gsid"=output_data$go_term)
+#create gson object
+Ni_gson <- gson(gsid2gene = gsid2gene, gsid2name= term2name, version = "1.0.1", species = "Nicotiana benthamiana", gsname="GO", accessed_date = "11 June 2023")
+# return 51729 genes annotated by 11529 gene sets
+
+
+
+```
+
+If a user has GO annotation data (in a data.frame format with the first column as gene ID and the second column as GO ID), they can use the enricher() and GSEA() functions to perform an over-representation test and gene set enrichment analysis.
+
+
+```{r}
+
+creat
+
+
+dropGO()
+```
+
+
+```{r}
+ghuwtvsmut4 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu4", "mutant_GHu4"),alpha=0.05), na.rm=T)
+ghuwtvsmut4_enrich <- noquote(rownames(subset(ghuwtvsmut4, pvalue<0.05 & abs(log2FoldChange)>1)))
+ghuwvm4 <- ghuwtvsmut4[,2]
+names(ghuwvm4) <- rownames(ghuwtvsmut4)
+geneList <- sort(ghuwvm4, decreasing =TRUE)
+
+
+gene <- as.vector(rownames(subset(ghumutvsctrl17, pvalue<0.05 & log2FoldChange)>1))
+gene
+x <- enricher(gene,pvalueCutoff = 0.05, gson= Ni_gson, pAdjustMethod = "BH",qvalueCutoff = 0.05)
+rownames(ghumutvsctrl17)
+TERM2GENE=gsid2gene,TERM2NAME=term2name,
+ghumutvsctrl17_enrich2 <- as.vector(ghumutvsctrl17_enrich)
+typeof(ghumutvsctrl17_enrich2)
+
+head(ghumutvsctrl17_enrich)
+ghuwm4 <- enricher(ghumutvsctrl17_enrich2, gson = Ni_gson)
+ghuwm4 <- groupGO(ghumutvsctrl17_enrich, gson = Ni_gson)
+idType()
+enrichGO()
+```
+
+
+```{r}
+
+require(clusterProfiler)
+data(geneList, package="DOSE")
+de <- names(geneList)[abs(geneList) > 2]
+bp <- enrichGO(de, ont="BP")
+enrichMap(bp)
+bp2 <- simplify(bp, cutoff=0.7, by="p.adjust", select_fun=min)
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+#DOSE
+#gene2DO
+#enrichr
+
+
+# need to do KEGG analysis
+library(limma)
+
+kegga()
+# de is the gene list for analysis
+# species.KEGG = "ko" should be put instead of species
+#
+
+
+topKEGG()
+https://rdrr.io/bioc/limma/man/goana.html
+
+## Default S3 method:
+goana(de, universe = NULL, species = "Hs", prior.prob = NULL, covariate=NULL,
+      plot=FALSE, ...)
+## Default S3 method:
+kegga(de, universe = NULL, restrict.universe = FALSE, species = "Hs", species.KEGG = NULL,
+      convert = FALSE, gene.pathway = NULL, pathway.names = NULL,
+      prior.prob = NULL, covariate=NULL, plot=FALSE, ...)
+getGeneKEGGLinks(species.KEGG = "hsa", convert = FALSE)
+getKEGGPathwayNames(species.KEGG = NULL, remove.qualifier = FALSE)
+
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```

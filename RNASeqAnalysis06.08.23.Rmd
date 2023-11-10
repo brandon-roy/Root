@@ -1,0 +1,759 @@
+---
+title: "RNA-Seq Analysis 5.24.23"
+author: "Brandon Roy"
+date: "2023-05-25"
+output: html_document
+---
+
+```{r}
+#import and load relevant packages, create relevant functions, import data
+
+library(DESeq2) # main RNA-Seq analysis pipeline
+library(pheatmap)
+#library(PCAtools)
+library(tidyverse)
+library(ggplot2)
+library(ggfortify)
+library(goseq)
+library(ggpubr)
+library(tidyr)
+library(dplyr)
+library(WGCNA) # network analysis
+library(wesanderson)
+library(Rmisc)
+library(grid)
+library(gridExtra)
+library(lemon)
+library(purrr)
+library(rnaseqGene)
+library(IHW)
+library(ggrepel)
+library(multiClust) # generating hierarchal clustering
+#library(glmGamPoi)
+library(pcaExplorer)
+library(factoextra)
+
+guide_axis_label_trans <- function(label_trans = identity, ...) {
+  axis_guide <- guide_axis(...)
+  axis_guide$label_trans <- rlang::as_function(label_trans)
+  class(axis_guide) <- c("guide_axis_trans", class(axis_guide))
+  axis_guide
+}
+
+guide_train.guide_axis_trans <- function(x, ...) {
+  trained <- NextMethod()
+  trained$key$.label <- x$label_trans(trained$key$.label)
+  trained
+}
+
+```
+
+### Perform this code block once to gather gene counts for all samples
+
+```{r}
+# assemble gene counts from featureCounts into single matrix
+f_files<- list.files("./featureCounts output", full.names = T)
+print(f_files)
+read_in_feature_counts<- function(file){
+  cnt<- read_tsv(file, col_names=T, comment='#')
+  cnt<- cnt %>% dplyr::select(-Chr, -Start, -End, -Strand, -Length)
+  return(cnt)
+}
+raw_counts<- map(f_files, read_in_feature_counts)
+raw_counts_df<- purrr::reduce(raw_counts,inner_join)
+
+# all counts are in one matrix and can be manipulated # now write to file
+write.table(raw_counts_df, file = "geneCount.txt", row.names = F, col.names = F)
+raw_counts_df <- read.table(file= "geneCount.txt")
+```
+
+```{r}
+
+#import necessary files
+metadata <- read.table("Sample_metadata.txt", header = TRUE)
+
+matrixFile <- "geneCount.txt"
+sampleFile <- "Sample_metadata.txt"
+
+#Input file manipulation
+originalmatrixFile <- read.delim(matrixFile,header=FALSE,sep = " ")
+cleanedmatrixFile <- originalmatrixFile[!duplicated(originalmatrixFile$V1), ]
+cts1 <- data.frame(cleanedmatrixFile[,-1], row.names=cleanedmatrixFile[,1])
+cts <- cts1[,-18]
+coldata1 <- read.delim("Sample_metadata.txt", sep='\t',row.names=1,header=TRUE )
+coldata <- coldata1[-18,]
+colnames(cts) <- rownames(coldata)
+
+#Test whether rownames of coldata match colnames of cts
+all(rownames(coldata) == colnames(cts)) #should return true
+
+# Adding a column 'group' to represent interaction of treatment*time:
+coldata$group <- factor(paste0(coldata$Treatment, coldata$Time))
+coldata$Time <- as.factor(coldata$Time)
+coldata$Treatment <- as.factor(coldata$Treatment)
+#ggplot(data=cts, aes(x=cols(cts), y=count(cts)))
+barplot(colSums(cts[,1:26]), col = c('gray','gray','gray','orange','orange','orange','red','red','red','gray','gray','gray','orange','orange','orange','red','red','gray','gray','gray','orange','orange','orange','red','red','red'), cex.names=1, las=2)
+#geom_bar(cts, aes(x=row.names(cts)))
+
+
+# Step 1: Sum the counts for each sample
+sample_counts <- colSums(cts)
+
+# Create a data frame with sample names and their corresponding counts
+count_data <- data.frame(sample = colnames(cts), count = sample_counts)
+count_data$sample <- sub(".sorted.bam$", "", count_data$sample)
+
+# Step 2: Create a barplot using ggplot2
+ggplot(count_data, aes(x = sample, y = count)) +
+  geom_bar(stat = "identity", fill = c('gray','gray','gray','red','red','red','orange','orange','orange','gray','gray','gray','red','red','red','orange','orange','gray','gray','gray','red','red','red','orange','orange','orange')) +
+  labs(x = "", y = "") +
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE), limits = c(0,205000)) +
+  theme(axis.text = element_text(size = 12), axis.text.x = element_text(angle = 45, hjust = 1), 
+        panel.background = element_rect(fill = "white", colour = "white", size = 0.5, linetype = "solid"),
+        panel.grid.major = element_line(size = 0.15, linetype = 'solid', colour = "gray"), 
+        panel.grid.minor = element_line(size = 0.1, linetype = 'solid', colour = "gray"))
+
+sum(colSums(cts[,1:26]))/26
+```
+
+```{r}
+# Deseq2 model construction: (design = ~ Treatment + Time + Interaction)
+dds_root <- DESeqDataSetFromMatrix(countData = cts, colData = coldata, design = ~1 + group)
+keep <- rowSums(counts(dds_root)) >= 20
+dds_root <- dds_root[keep,]
+
+# Run DeSeq2
+dds_out <- DESeq(dds_root)
+print("Group comparison outputs of DESeq2 model:")
+print(resultsNames(dds_out_root))
+print("Dispersion Estimates of Counts")
+plotDispEsts(dds_out_root)
+
+# Transformation
+vsd_root <- vst(dds_out_root, nsub=1000)
+vsd_root
+# plotDispEst(vsd)
+cts_vst_root <- assay(vsd_root)
+cts_vst_root <- as.data.frame(t(cts_vst_root))
+datExpr0 <- as.matrix(cts_vst_root)
+datExpr0_root <- as.matrix(cts_vst_root)
+
+plotPCA(vsd_root, intgroup= c("Treatment","Time"), returnData=F, ntop=500)
+despca <- plotPCA(vsd_root, intgroup= c("Treatment","Time"), returnData=T)
+
+ggplot(despca, aes(x=PC1, y=PC2, color = as.factor('Treatment'), shape=as.factor("Time"), label=name)) +
+  geom_point(color = c('gray','gray','gray','red','red','red','orange','orange','orange','gray','gray','gray','red','red', 'red','orange','orange','gray','gray','gray','red','red','red','orange','orange','orange'), pch = c(15,15,15,15,15,15,15,15,15,16,16,16,16,16,16,16,16,17,17,17,17,17,17,17,17,17), size = 5) + xlab("") + ylab("") + geom_point(shape = c(0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2),size = 5,colour = "black")
+
+pca_res1 <- prcomp(datExpr0, scale. = F)
+autoplot(pca_res1, label=T)
+
+
+
+# Step 1: Sum the counts for each sample
+sample_counts <- rowSums(datExpr0)
+
+# Create a data frame with sample names and their corresponding counts
+count_data <- data.frame(sample = rownames(datExpr0), count = sample_counts)
+count_data$sample <- sub(".sorted.bam$", "", count_data$sample)
+sum(count_data$count)/26
+count_data$count
+# Step 2: Create a barplot using ggplot2
+ggplot(count_data, aes(x = sample, y = count)) +
+  geom_bar(stat = "identity", fill = c('gray','gray','gray','red','red','red','orange','orange','orange','gray','gray','gray','red','red', 'red','orange','orange','gray','gray','gray','red','red','red','orange','orange','orange')) +
+  labs(x = "", y = "") + scale_y_continuous(labels = function(x) format(x, scientific = FALSE), limits = c(0,280000)) + theme(axis.text = element_text(size = 12), axis.text.x = element_text(angle = 45, hjust = 1), panel.background = element_rect(fill = "white", colour = "white", size = 0.5, linetype = "solid"),
+  panel.grid.major = element_line(size = 0.15, linetype = 'solid', colour = "gray"), 
+  panel.grid.minor = element_line(size = 0.1, linetype = 'solid', colour = "gray"))
+
+#pcascree(p, type=c("pev","cev"))
+#rv <- rowVars(assay(vsd))
+#select <- order(rv, decreasing=TRUE)[seq_len(min(500,length(rv)))]
+#pca <- prcomp(t(assay(vsd)[select,]))
+#percentVar <- pca$sdev^2 / sum(pca$sdev^2)
+#scree_plot=data.frame(percentVar)
+#scree_plot[,2]<- c(1:26)
+#colnames(scree_plot)<-c("variance","component_number")
+#ggplot(scree_plot, mapping=aes(x=component_number, y=variance))+geom_bar(stat="identity")
+#  with(scree_plot, plot(component_number,variance), pch=20, xlim=c(0,10))+geom_bar(stat="identity")
+```
+
+```{r}
+#rownames(datExpr0) <- vsd$group
+sampleTree <- hclust(dist(datExpr0), method = "mcquitty") # This method seems to group the data the best, weighted pair cluster analysis
+plot(sampleTree)
+```
+
+```{r}
+ghuwtvsmut04 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu4", "mutant_GHu4"),alpha=0.1), na.rm=T)
+ghuwtvsmut04 <- na.omit(ghuwtvsmut04, cols=ghuwtvsmut04$padj)
+sum(ghuwtvsmut04$padj < 0.05 & ghuwtvsmut04$log2FoldChange > 1)
+sum(ghuwtvsmut04$padj < 0.05 & ghuwtvsmut04$log2FoldChange < -1)
+ghuwtvsmut17 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu17", "mutant_GHu17"),alpha=0.1), na.rm=T)
+ghuwtvsmut17 <- na.omit(ghuwtvsmut17, cols=ghuwtvsmut17$padj)
+sum(ghuwtvsmut17$padj < 0.05 & ghuwtvsmut17$log2FoldChange > 1)
+sum(ghuwtvsmut17$padj < 0.05 & ghuwtvsmut17$log2FoldChange < -1)
+ghuwtvsmut26 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu26", "mutant_GHu26"),alpha=0.1), na.rm=T)
+ghuwtvsmut26 <- na.omit(ghuwtvsmut26, cols=ghuwtvsmut26$padj)
+sum(ghuwtvsmut26$padj < 0.05 & ghuwtvsmut26$log2FoldChange > 1)
+sum(ghuwtvsmut26$padj < 0.05 & ghuwtvsmut26$log2FoldChange < -1)
+
+sum(ghuwtvsmut04$pvalue < 0.05 & ghuwtvsmut04$log2FoldChange > 1)
+sum(ghuwtvsmut04$pvalue < 0.05 & ghuwtvsmut04$log2FoldChange < -1)
+sum(ghuwtvsmut17$pvalue < 0.05 & ghuwtvsmut17$log2FoldChange > 1)
+sum(ghuwtvsmut17$pvalue < 0.05 & ghuwtvsmut17$log2FoldChange < -1)
+sum(ghuwtvsmut26$pvalue < 0.05 & ghuwtvsmut26$log2FoldChange > 1)
+sum(ghuwtvsmut26$pvalue < 0.05 & ghuwtvsmut26$log2FoldChange < -1)
+
+```
+
+```{r}
+ with(ghuwtvsmut04, plot(log2FoldChange, -log10(pvalue), pch=20, main="wildtype GHu vs mutant GHu 1EK802G (4dpi)", xlim=c(-7,7), ylim=c(0,15)))+
+  with(subset(ghuwtvsmut04, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghuwtvsmut04, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghuwtvsmut04, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+with(ghuwtvsmut17, plot(log2FoldChange, -log10(pvalue), pch=20, main="wildtype GHu vs mutant GHu 1EK802G (17dpi)", xlim=c(-7,7), ylim=c(0,20)))+
+  with(subset(ghuwtvsmut17, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghuwtvsmut17, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghuwtvsmut17, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+with(ghuwtvsmut26, plot(log2FoldChange, -log10(pvalue), pch=20, main="wildtype GHu vs mutant GHu 1EK802G (26dpi)", xlim=c(-7,7), ylim=c(0,15)))+
+  with(subset(ghuwtvsmut26, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghuwtvsmut26, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghuwtvsmut26, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+```
+
+```{r}
+ghuwtvsctrl04 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu4", "control4"),alpha=0.1), na.rm=T)
+ghuwtvsctrl04 <- na.omit(ghuwtvsctrl04, cols=ghumutvsctrl26$padj)
+sum(ghuwtvsctrl04$padj < 0.05 & ghuwtvsctrl04$log2FoldChange > 1)
+sum(ghuwtvsctrl04$padj < 0.05 & ghuwtvsctrl04$log2FoldChange < -1)
+ghuwtvsctrl17 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu17", "control17"),alpha=0.1), na.rm=T)
+ghuwtvsctrl17 <- na.omit(ghuwtvsctrl17, cols=ghuwtvsctrl17$padj)
+sum(ghuwtvsctrl17$padj < 0.05 & ghuwtvsctrl17$log2FoldChange > 1)
+sum(ghuwtvsctrl17$padj < 0.05 & ghuwtvsctrl17$log2FoldChange < -1)
+ghuwtvsctrl26 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu26", "control26"),alpha=0.1), na.rm=T)
+ghuwtvsctrl26 <- na.omit(ghuwtvsctrl26, cols=ghuwtvsctrl26$padj)
+sum(ghuwtvsctrl26$padj < 0.05 & ghuwtvsctrl26$log2FoldChange > 1)
+sum(ghuwtvsctrl26$padj < 0.05 & ghuwtvsctrl26$log2FoldChange < -1)
+
+sum(ghuwtvsctrl04$pvalue < 0.05 & ghuwtvsctrl04$log2FoldChange > 1)
+sum(ghuwtvsctrl04$pvalue < 0.05 & ghuwtvsctrl04$log2FoldChange < (-1))
+sum(ghuwtvsctrl17$pvalue < 0.05 & ghuwtvsctrl17$log2FoldChange > 1)
+sum(ghuwtvsctrl17$pvalue < 0.05 & ghuwtvsctrl17$log2FoldChange < -1)
+sum(ghuwtvsctrl26$pvalue < 0.05 & ghuwtvsctrl26$log2FoldChange > 1)
+sum(ghuwtvsctrl26$pvalue < 0.05 & ghuwtvsctrl26$log2FoldChange < -1)
+
+
+
+
+```
+
+```{r}
+with(ghuwtvsctrl04, plot(log2FoldChange, -log10(pvalue), pch=20, main="wildtype GHu vs mock control (4dpi)", xlim=c(-11,7), ylim=c(0,15)))+
+  with(subset(ghuwtvsctrl04, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghuwtvsctrl04, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghuwtvsctrl04, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+with(ghuwtvsctrl17, plot(log2FoldChange, -log10(pvalue), pch=20, main="wildtype GHu vs mock control (17dpi)", xlim=c(-11,7), ylim=c(0,20)))+
+  with(subset(ghuwtvsctrl17, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghuwtvsctrl17, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghuwtvsctrl17, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+with(ghuwtvsctrl26, plot(log2FoldChange, -log10(pvalue), pch=20, main="wildtype GHu vs mock control (26dpi)", xlim=c(-11,7), ylim=c(0,15)))+
+  with(subset(ghuwtvsctrl26, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghuwtvsctrl26, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghuwtvsctrl26, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+```
+
+```{r}
+
+ghumutvsctrl04 <- data.frame(results(dds_out_root, contrast=c("group", "mutant_GHu4", "control4"),alpha=0.1), na.rm=T)
+ghumutvsctrl04 <- na.omit(ghumutvsctrl04, cols=ghumutvsctrl26$padj)
+ghumutvsctrl17 <- data.frame(results(dds_out_root, contrast=c("group", "mutant_GHu17", "control17"),alpha=0.1), na.rm=T)
+ghumutvsctrl17 <- na.omit(ghumutvsctrl17, cols=ghumutvsctrl17$padj)
+ghumutvsctrl26 <- data.frame(results(dds_out_root, contrast=c("group", "mutant_GHu26", "control26"),alpha=0.1), na.rm=T)
+ghumutvsctrl26 <- na.omit(ghumutvsctrl26, cols=ghumutvsctrl26$padj)
+
+sum(ghumutvsctrl04$padj < 0.05 & ghumutvsctrl04$log2FoldChange > 1)
+sum(ghumutvsctrl04$padj < 0.05 & ghumutvsctrl04$log2FoldChange < -1)
+sum(ghumutvsctrl17$padj < 0.05 & ghumutvsctrl17$log2FoldChange > 1)
+sum(ghumutvsctrl17$padj < 0.05 & ghumutvsctrl17$log2FoldChange < -1)
+sum(ghumutvsctrl26$padj < 0.05 & ghumutvsctrl26$log2FoldChange > 1)
+sum(ghumutvsctrl26$padj < 0.05 & ghumutvsctrl26$log2FoldChange < -1)
+
+sum(ghumutvsctrl04$pvalue < 0.05 & ghumutvsctrl04$log2FoldChange > 1)
+sum(ghumutvsctrl04$pvalue < 0.05 & ghumutvsctrl04$log2FoldChange < -1)
+sum(ghumutvsctrl17$pvalue < 0.05 & ghumutvsctrl17$log2FoldChange > 1)
+sum(ghumutvsctrl17$pvalue < 0.05 & ghumutvsctrl17$log2FoldChange < -1)
+sum(ghumutvsctrl26$pvalue < 0.05 & ghumutvsctrl26$log2FoldChange > 1)
+sum(ghumutvsctrl26$pvalue < 0.05 & ghumutvsctrl26$log2FoldChange < -1)
+
+```
+
+```{r}
+with(ghumutvsctrl04, plot(log2FoldChange, -log10(pvalue), pch=20, main="mutant GHu 1EK802G  vs mock control (4dpi)", xlim=c(-10,15), ylim=c(0,15)))+
+  with(subset(ghumutvsctrl04, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghumutvsctrl04, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghumutvsctrl04, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+with(ghumutvsctrl17, plot(log2FoldChange, -log10(pvalue), pch=20, main="mutant GHu 1EK802G vs mock control (17dpi)", xlim=c(-10,15), ylim=c(0,20)))+
+  with(subset(ghumutvsctrl17, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghumutvsctrl17, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghumutvsctrl17, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+with(ghumutvsctrl26, plot(log2FoldChange, -log10(pvalue), pch=20, main="mutant GHu 1EK802G vs mock control (26dpi)", xlim=c(-10,15), ylim=c(0,15)))+
+  with(subset(ghumutvsctrl26, pvalue<.05 ), points(log2FoldChange, -log10(pvalue), pch=20, col="#CEC2EB"))+
+  with(subset(ghumutvsctrl26, abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="gray"))+
+  with(subset(ghumutvsctrl26, pvalue<.05 & abs(log2FoldChange)>1), points(log2FoldChange, -log10(pvalue), pch=20, col="purple"))
+```
+
+```{r}
+library(clipr)
+
+write_clip(ghuwtvsctrl04_enrich)
+write_clip(ghuwtvsctrl17_enrich)
+write_clip(ghuwtvsctrl26_enrich)
+
+write_clip(ghumutvsctrl04_enrich)
+write_clip(ghumutvsctrl17_enrich)
+write_clip(ghumutvsctrl26_enrich)
+
+write_clip(ghuwtvsmut04_enrich)
+write_clip(ghuwtvsmut17_enrich)
+write_clip(ghuwtvsmut26_enrich)
+
+```
+
+```{r}
+library(clusterProfiler)
+library(gprofiler2)
+#Gff2GeneTable("Niben1.gff")
+
+read.gmt("GO_Niben3.gmt")
+upload_GMT_file("output88.gmt")
+read.gmt("output_file_gmt.gmt")
+upload_GMT_file("GO_Niben3.gmt")
+upload_GMT_file("output999.gmt")
+
+# here is the custom ID : "gp__NEPK_ldZt_ZOw"
+# new custom ID is: "gp__qbRo_UR6z_xEU"
+upload_GMT_file("output9999.gmt")
+gp__CkPw_qBVv_TQo
+
+ghuwtvsmut04 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu4", "mutant_GHu4"),alpha=0.2), na.rm=T)
+ghuwtvsmut04_enrich <- noquote(rownames(subset(ghuwtvsmut04, pvalue<0.05 & abs(log2FoldChange)>0.75)))
+lapply(ghuwtvsmut04_enrich, write, 'ghuwtmut04dpigenes.txt', append=T)
+ghuwtvsmut04_result <-  gost(ghuwtvsmut04_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO4 <- data.frame("condition" = "wildtype GHu vs mutant GHu 04dpi", "GOghu" = ghuwtvsmut04_result$result$term_id,
+"name" = ghuwtvsmut04_result$result$term_name, "ratio" = ghuwtvsmut04_result$result$term_size, "P.value" = ghuwtvsmut04_result$result$p_value)
+ggplot(data = dataGO4, aes(x = "GHu WT vs GHu Mutant 04 dpi", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+
+
+ghuwtvsmut17 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu17", "mutant_GHu17"),alpha=0.2), na.rm=T)
+ghuwtvsmut17_enrich <- noquote(rownames(subset(ghuwtvsmut17, pvalue<0.05 & abs(log2FoldChange)>1)))
+lapply(ghuwtvsmut17_enrich, write, 'ghuwtmut17dpigenes.txt', append=T)
+ghuwtvsmut17_result <-  gost(ghuwtvsmut17_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = T, ordered_query=T)
+dataGO17 <- data.frame("condition" = "wildtype GHu vs mutant GHu 17dpi", "GOghu" = ghuwtvsmut17_result$result$term_id,
+"name" = ghuwtvsmut17_result$result$term_name, "ratio" = ghuwtvsmut17_result$result$term_size, "P.value" = ghuwtvsmut17_result$result$p_value)
+ggplot(data = dataGO17, aes(x = "GHu WT vs GHu Mutant 17 dpi", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+
+ghuwtvsmut26 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu26", "mutant_GHu26"),alpha=0.2), na.rm=T)
+ghuwtvsmut26_enrich <- noquote(rownames(subset(ghuwtvsmut26, pvalue<0.05 & abs(log2FoldChange)>.75)))
+lapply(ghuwtvsmut26_enrich, write, 'ghuwtmut26dpigenes.txt', append=T)
+ghuwtvsmut26_result <-  gost(ghuwtvsmut26_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query = T)
+dataGO26 <- data.frame("condition" = "wildtype GHu vs mutant GHu 26dpi", "GOghu" = ghuwtvsmut26_result$result$term_id,
+"name" = ghuwtvsmut26_result$result$term_name, "ratio" = ghuwtvsmut26_result$result$term_size, "P.value" = ghuwtvsmut26_result$result$p_value)
+ggplot(data = dataGO26, aes(x = "GHu WT vs GHu Mutant 26 dpi", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+
+
+```
+
+```{r}
+#library(DESeq2)
+ghumutvsctrl04 <- data.frame(results(dds_out_root, contrast=c("group", "mutant_GHu4", "control4"),alpha=0.1), na.rm=T)
+ghumutvsctrl04_enrich <- noquote(rownames(subset(ghumutvsctrl04, pvalue<0.05 & abs(log2FoldChange)>1)))
+lapply(ghumutvsctrl04_enrich, write, 'ghumutvsctrl04_enrich.txt', append=T)
+ghumutvsctrl04_result <-  gost(ghumutvsctrl04_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO04_GMC <- data.frame("condition" = "mutant GHu vs mock control 04 dpi", "GOghu" = ghumutvsctrl04_result$result$term_id,
+"name" = ghumutvsctrl04_result$result$term_name, "ratio" = ghumutvsctrl04_result$result$term_size, "P.value" = ghumutvsctrl04_result$result$p_value)
+
+ghumutvsctrl17 <- data.frame(results(dds_out_root, contrast=c("group", "mutant_GHu17", "control17"),alpha=0.1), na.rm=T)
+ghumutvsctrl17_enrich <- noquote(rownames(subset(ghumutvsctrl17, pvalue<0.05 & log2FoldChange)>1))
+lapply(ghumutvsctrl17_enrich, write, 'ghumutvsctrl17_enrich.txt', append=T)
+ghumutvsctrl17_result <-  gost(ghumutvsctrl17_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO17_GMC <- data.frame("condition" = "mutant GHu vs mock control 17 dpi", "GOghu" = ghumutvsctrl17_result$result$term_id,
+"name" = ghumutvsctrl17_result$result$term_name, "ratio" = ghumutvsctrl17_result$result$term_size, "P.value" = ghumutvsctrl17_result$result$p_value)
+
+ghumutvsctrl26 <- data.frame(results(dds_out_root, contrast=c("group", "mutant_GHu26", "control26"),alpha=0.1), na.rm=T)
+ghumutvsctrl26_enrich <- noquote(rownames(subset(ghumutvsctrl26, pvalue<0.05 & abs(log2FoldChange)>1)))
+lapply(ghumutvsctrl26_enrich, write, 'ghumutvsctrl26_enrich.txt', append=T)
+ghumutvsctrl26_result <-  gost(ghumutvsctrl26_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO26_GMC <- data.frame("condition" = "mutant GHu vs mock control 26 dpi", "GOghu" = ghumutvsctrl26_result$result$term_id,
+"name" = ghumutvsctrl26_result$result$term_name, "ratio" = ghumutvsctrl26_result$result$term_size, "P.value" = ghumutvsctrl26_result$result$p_value)
+
+
+ghuwtvsctrl04 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu4", "control4"),alpha=0.1), na.rm=T)
+ghuwtvsctrl04_enrich <- noquote(rownames(subset(ghuwtvsctrl04, pvalue<0.05 & abs(log2FoldChange)>0.5)))
+lapply(ghuwtvsctrl04_enrich, write, 'ghuwtvsctrl04_enrich.txt', append=T)
+ghuwtvsctrl04_result <-  gost(ghuwtvsctrl04_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO04_GWC <- data.frame("condition" = "wildtype GHu vs mock control 04 dpi", "GOghu" = ghuwtvsctrl04_result$result$term_id,
+"name" = ghuwtvsctrl04_result$result$term_name, "ratio" = ghuwtvsctrl04_result$result$term_size, "P.value" = ghuwtvsctrl04_result$result$p_value)
+
+ghuwtvsctrl17 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu17", "control17"),alpha=0.1), na.rm=T)
+ghuwtvsctrl17_enrich <- noquote(rownames(subset(ghuwtvsctrl17, pvalue<0.05 & abs(log2FoldChange)>1)))
+lapply(ghuwtvsctrl17_enrich, write, 'ghuwtvsctrl17_enrich.txt', append=T)
+ghuwtvsctrl17_result <-  gost(ghuwtvsctrl17_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO17_GWC <- data.frame("condition" = "wildtype GHu vs mock control 17 dpi", "GOghu" = ghuwtvsctrl17_result$result$term_id,
+"name" = ghuwtvsctrl17_result$result$term_name, "ratio" = ghuwtvsctrl17_result$result$term_size, "P.value" = ghuwtvsctrl17_result$result$p_value)
+
+ghuwtvsctrl26 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu26", "control26"),alpha=0.1), na.rm=T)
+ghuwtvsctrl26_enrich <- noquote(rownames(subset(ghuwtvsctrl26, pvalue<0.05 & abs(log2FoldChange)>1)))
+lapply(ghuwtvsctrl26_enrich, write, 'ghuwtvsctrl26_enrich.txt', append=T)
+ghuwtvsctrl26_result <-  gost(ghuwtvsctrl26_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE, ordered_query=T)
+dataGO26_GWC <- data.frame("condition" = "wildtype GHu vs mock control 26 dpi", "GOghu" = ghuwtvsctrl26_result$result$term_id,
+"name" = ghuwtvsctrl26_result$result$term_name, "ratio" = ghuwtvsctrl26_result$result$term_size, "P.value" = ghuwtvsctrl26_result$result$p_value)
+
+
+wtctrl <- gost(c(ghuwtvsctrl04_enrich, ghuwtvsctrl17_enrich, ghuwtvsctrl26_enrich), multi_query = TRUE, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE)
+dataGO26_GWC <- data.frame("condition" = "wildtype GHu vs mock control 26 dpi", "GOghu" = ghuwtvsctrl26_result$result$term_id,
+"name" = ghuwtvsctrl26_result$result$term_name, "ratio" = ghuwtvsctrl26_result$result$term_size, "P.value" = ghuwtvsctrl26_result$result$p_value)
+
+```
+
+```{r}
+library(ggh4x)
+library(reshape)
+library(ggplot2)
+exp_wide_ontology <- list(dataGO4, dataGO17, dataGO26, dataGO04_GWC, dataGO17_GWC, dataGO26_GWC, dataGO04_GMC, dataGO17_GMC, dataGO26_GMC)
+
+GO_plot_all <- Reduce(function(x,y) merge(x,y, all=TRUE), exp_wide_ontology, accumulate=FALSE)
+#GO_plot_all$name <- gsub("_", " ", GO_plot_all$name)
+GO_plot_secondary <- unique(GO_plot_all$GOghu)
+ggplot(data = GO_plot_all, aes(x = condition, y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 40, vjust = 1, hjust = 1), text = element_text(size=12))
+
+ggsave("experiment_wide_ontology3.pdf", height=20, width=9)
+
+wildtypeOntology <- list(dataGO04_GWC, dataGO17_GWC, dataGO26_GWC)
+GO_plot_main <- Reduce(function(x,y) merge(x,y, all=TRUE), wildtypeOntology, accumulate=FALSE)
+ggplot(data = GO_plot_main, aes(x = condition, y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 30, vjust = 1, hjust = 1), text = element_text(size=14))
+ggsave("ghuwtGSEAalltime.pdf", height=12, width=7.5)
+
+ggplot(data = dataGO17_GWC, aes(x = "mock control vs wildtype GHu 17 dpi", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+
+ggsave("ontology_at_17dpi_ghuwt_ctrl.pdf", height=10, width=6.5)
+
+```
+
+```{r}
+
+ghuwtvsmut4 <- data.frame(results(dds_out_root, contrast=c("group", "wildtype_GHu4", "mutant_GHu4"),alpha=0.05), na.rm=T)
+ghuwtvsmut4_enrich <- noquote(rownames(subset(ghuwtvsmut4, pvalue<0.05 & abs(log2FoldChange)>1)))
+lapply(ghuwtvsmut4_enrich, write, 'ghuwtmut4dpigenes.txt', append=T)
+ghuwtvsmut4_result <-  gost(ghuwtvsmut4_enrich, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE)
+dataGO4 <- data.frame("condition" = "GHu WT vs GHu Mutant 4dpi", "GOghu" = ghuwtvsmut4_result$result$term_id,
+"name" = ghuwtvsmut4_result$result$term_name, "ratio" = ghuwtvsmut4_result$result$term_size, "P.value" = ghuwtvsmut4_result$result$p_value)
+
+
+f13wtvsmut4_enrich <- noquote(rownames(subset(f13wtvsmut4, padj<0.05 & abs(log2FoldChange)>1)))
+f13wtvsmut4_enrich
+f13wtvsmut4_result <-  gost(f13wtvsmut4_enrich, organism = 'gp__HTvx_rYJC_ffE', significant = TRUE)
+dataGO4_F13 <- data.frame("condition" = "F13 WT vs F13 Mutant 4dpi","GOghu" = f13wtvsmut4_result$result$term_id,
+"name" = f13wtvsmut4_result$result$term_name, "ratio" = f13wtvsmut4_result$result$term_size, "P.value" = f13wtvsmut4_result$result$p_value)
+
+ggplot(data = dataGO4_F13, aes(x = "F13 WT vs F13 Mutant 4dpi", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+
+ghuwtvsf13wt7_enrich <- noquote(rownames(subset(ghuwtvsf13wt7, padj<0.05 & abs(log2FoldChange)>1)))
+ghuwtvsf13wt7_enrich
+ghuwtvsf13wt7_result <-  gost(ghuwtvsf13wt7_enrich, organism = 'gp__HTvx_rYJC_ffE', significant = TRUE)
+dataGO7_GHu_F13 <- data.frame("condition" = "GHu WT vs F13 WT 7dpi", "GOghu" = ghuwtvsf13wt7_result$result$term_id,
+"name" = ghuwtvsf13wt7_result$result$term_name, "ratio" = ghuwtvsf13wt7_result$result$term_size, "P.value" = ghuwtvsf13wt7_result$result$p_value)
+
+ggplot(data = dataGO7_GHu_F13, aes(x = "GHu WT vs F13 WT 7dpi", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+
+# Overrepresentation of gene ontology for GHu WT and controls - returned insiginficant results for 4 and 12 dpi, but at 7dpi there were several ontologies found
+
+#controlghu4 <- data.frame(results(dds_out_root, contrast=c("group", "ghu_wt4", "Control4"),alpha=0.05))
+controlghu7 <- data.frame(results(dds_out_root, contrast=c("group", "ghu_wt7", "Control7"),alpha=0.05))
+#controlghu12 <- data.frame(results(dds_out_root, contrast=c("group", "ghu_wt12", "Control12"),alpha=0.05))
+
+#controlghu4_enrich <- noquote(rownames(subset(controlghu4, padj<0.05 & abs(log2FoldChange)>1)))
+controlghu7_enrich <- noquote(rownames(subset(controlghu7, padj<0.05 & abs(log2FoldChange)>1)))
+#controlghu12_enrich <- noquote(rownames(subset(controlghu12, padj<0.05 & abs(log2FoldChange)>1)))
+
+#controlghu4_result <-  gost(controlghu4_enrich, organism = 'gp__3CN5_Ndmp_GXo', significant = TRUE)
+controlghu7_result <-  gost(controlghu7_enrich, organism = 'gp__3CN5_Ndmp_GXo', significant = TRUE)
+#controlghu12_result <-  gost(controlghu12_enrich, organism = 'gp__3CN5_Ndmp_GXo', significant = TRUE)
+
+#dataGO4_controlghu <- data.frame("condition" = "Control vs GHu WT 4dpi", "GOghu" = controlghu4_result$result$term_id,
+#"name" = controlghu4_result$result$term_name, "ratio" = controlghu4_result$result$term_size, "P.value" = controlghu4_result$result$p_value)
+dataGO7_controlghu <- data.frame("condition" = "GHu WT vs Control 7dpi", "GOghu" = controlghu7_result$result$term_id,
+"name" = controlghu7_result$result$term_name, "ratio" = controlghu7_result$result$term_size, "P.value" = controlghu7_result$result$p_value)
+#dataGO12_controlghu <- data.frame("condition" = "Control vs GHu WT 12dpi", "GOghu" = controlghu12_result$result$term_id,
+#"name" = controlghu12_result$result$term_name, "ratio" = controlghu12_result$result$term_size, "P.value" = # controlghu12_result$result$p_value)
+
+ggplot(data = dataGO7_controlghu, aes(x = condition, y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+
+controlf137 <- data.frame(results(dds_out_root, contrast=c("group", "f13_wt7", "Control7"),alpha=0.05))
+controlf137_enrich <- noquote(rownames(subset(controlf137, padj<0.05 & abs(log2FoldChange)>1)))
+controlf137_result <-  gost(controlf137_enrich, organism = 'gp__3CN5_Ndmp_GXo', significant = TRUE)
+dataGO7_controlf13 <- data.frame("condition" = "F13 WT vs Control 7dpi", "GOghu" = controlf137_result$result$term_id,
+"name" = controlf137_result$result$term_name, "ratio" = controlf137_result$result$term_size, "P.value" = controlf137_result$result$p_value)
+
+ggplot(data = dataGO7_controlf13, aes(x = condition, y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+```
+
+```{r}
+
+exp_wide_ontology <- list(dataGO7_GHu_F13, dataGO7, dataGO4_F13, dataGO7_controlghu, dataGO7_controlf13)
+library(reshape)
+GO_plot_all <- Reduce(function(x,y) merge(x,y, all=TRUE), exp_wide_ontology, accumulate=FALSE)
+GO_plot_all$name <- gsub("_", " ", GO_plot_all$name)
+
+GO_plot_all$condition <- factor(GO_plot_all$condition, levels = c("F13 WT vs F13 Mutant 4dpi", "F13 WT vs Control 7dpi", "GHu WT vs Control 7dpi", "GHu WT vs F13 WT 7dpi", "GHu WT vs GHu Mutant 7dpi"))
+ggplot(data = GO_plot_all, aes(x = condition, y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), text = element_text(size=15))
+
+# cleaning up a little
+
+exp_wide_ontology <- list(dataGO7_GHu_F13, dataGO7, dataGO7_controlghu, dataGO7_controlf13)
+library(reshape)
+GO_plot_all <- Reduce(function(x,y) merge(x,y, all=TRUE), exp_wide_ontology, accumulate=FALSE)
+
+GO_plot_all$condition <- factor(GO_plot_all$condition, levels = c("Control vs F13 WT 7dpi", "Control vs GHu WT 7dpi", "GHu WT vs F13 WT 7dpi", "GHu WT vs GHu Mutant 7dpi"))
+ggplot(data = GO_plot_all, aes(x = condition, y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1), text = element_text(size=15))
+```
+
+```{r}
+# String protein network analysis
+# https://version-11-5.string-db.org/organism/STRG0071BOB 
+
+BiocManager::install("STRINGdb")
+library(STRINGdb)
+
+string_db <- STRINGdb$new(version ="", species<-'STRG0071BOB', score_threshold=200, network_type="full")
+
+#load annotation
+
+#add_protein_description(screen)
+
+
+
+```
+
+```{r}
+# NetSeekR https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-021-04554-1
+```
+
+```{r}
+getGeneKEGGLinks()
+getKEGGPathwayNames()
+
+```
+
+```{r}
+#KEGG Annotation with BLASTKoala
+#Kanehisa, M., Sato, Y., and Morishima, K.; BlastKOALA and GhostKOALA: KEGG tools for functional #characterization of genome and metagenome sequences. J. Mol. Biol. 428, 726-731 (2016).
+
+# Submitted 2 tasks through the BLASTKOALA server, due to limitation of 50,000 genes per task and N. benthamiana genome size of >57,000 genes from Niben v1.0.1
+# Files are saved as imported below
+user_ko1.txt
+user_ko2.txt
+#merge tables
+
+
+# Also tried using EGGNOG Annotation Mapper that took 16 minutes for entire N. benthamiana genome
+# provides several output files, in gff, xlsx, and txt files
+# import these files below to use clusterProfiler for enrichment analysis with not just GO terms, but also KO and KEGG, with bonus names
+
+gene_annot <- read.delim("out.emapper.decorated.gff")
+
+library(GenomicFeatures)
+txdb <- makeTxDbFromGFF("out.emapper.decorated.gff")
+tx<-transcriptsBy(txdb)
+
+
+
+BiocManager::install("KEGGREST")
+library(KEGGREST)
+
+ghuwtvsmut04
+ghuwtvsmut17
+ghuwtvsmut26
+
+ghuwtvsctrl04
+ghuwtvsctrl17
+ghuwtvsctrl26
+
+ghumutvsctrl04
+ghumutvsctrl17
+ghumutvsctrl26
+
+
+
+```
+
+```{r}
+# Make lists for root viral treatments versus control # 37784 transcript IDs
+gw17list <- noquote(rownames(subset(ghuwtvsctrl17, padj<0.05 & abs(log2FoldChange<1))))
+gm17list <- noquote(rownames(subset(ghumutvsctrl17, pvalue<0.05 & abs(log2FoldChange)>1)))
+
+# Pull data from apical leaf transcriptomics # 31396 transcript IDs
+ghuwtvscontrol7 <- data.frame(results(dds_out, contrast=c("group", "ghu_wt7","Control7"),alpha=0.05))
+ghumuttvscontrol7 <- data.frame(results(dds_out, contrast=c("group", "ghu_mut7","Control7"),alpha=0.1))
+f13wtvscontrol7 <- data.frame(results(dds_out, contrast=c("group", "f13_wt7","Control7"),alpha=0.1))
+f13mutvscontrol7 <- data.frame(results(dds_out, contrast=c("group", "f13_mut7","Control7"),alpha=0.1))
+
+# Make lists for shoot viral treatments versus control
+gw7list <- noquote(rownames(subset(ghuwtvscontrol12, padj<0.05 & abs(log2FoldChange)>1)))
+gm7list <- noquote(rownames(subset(ghumuttvscontrol7, pvalue<0.05 & abs(log2FoldChange)>1)))
+fw7list <- noquote(rownames(subset(f13wtvscontrol7, pvalue<0.05 & abs(log2FoldChange)>1)))
+fm7list <- noquote(rownames(subset(f13mutvscontrol7, pvalue<0.05 & abs(log2FoldChange)>1)))
+
+# Perform contrasts
+Reduce(intersect, list(gw17list,gw7list))
+Reduce(intersect, list(gw17list,gm7list))
+Reduce(intersect, list(gm17list,gm7list))
+Reduce(intersect, list(gm17list,gw7list))
+
+overlap <- Reduce(intersect, list(colnames(cts_vst), colnames(cts_vst_root)))
+#30,262 transcripts are same ID detected >1 time in analysis per sample
+37784-30262
+31396-30262
+
+Reduce(intersect, list(gw17list,fw7list))
+Reduce(intersect, list(gw17list,fm7list))
+Reduce(intersect, list(gm17list,fw7list))
+Reduce(intersect, list(gm17list,fm7list))
+
+overlap7 <- Reduce(intersect, list(rownames(vsd7),rownames(vsd)))
+#27,172 transcript IDs in common between the two datasets 37784 from roots at all time points and 29598 from apical leaves at 7 dpi
+# what if the DEGs in roots are exclusive to root tissue, need to contrast unique values from root contrast to apical all genes
+Reduce(intersect, list(gw17list, rownames(vsd7)))
+3883-2682
+count(Reduce(intersect, list(gm17list, rownames(vsd7))))
+4627-2957
+
+count(Reduce(intersect, list(gw7list, rownames(vsd7))))
+3667-3421
+count(Reduce(intersect, list(gm7list, rownames(vsd))))
+847-784
+count(Reduce(intersect, list(fw7list, rownames(vsd))))
+2105-1970
+count(Reduce(intersect, list(fm7list, rownames(vsd))))
+1457-1369
+
+
+A_list <- noquote(Reduce(intersect, list(gw17list,gw7list)))
+B_list <- noquote(Reduce(intersect, list(gm17list,gm7list)))
+
+A_result <-  gost(A_list, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE)
+dataGOA <- data.frame("condition" = "wildtype GHu vs mock control in roots and shoots","GOghu" = A_result$result$term_id,
+"name" = A_result$result$term_name, "ratio" = A_result$result$term_size, "P.value" = A_result$result$p_value)
+library(ggplot2)
+ggplot(data = dataGOA, aes(x = "wildtype GHu vs mock control in roots and shoots", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis") +
+  theme(text = element_text(size=16))
+ggsave("shootstoroots.pdf", height=6, width=8)
+B_result <-  gost(B_list, organism = 'gp__CkPw_qBVv_TQo', significant = TRUE)
+dataGOB <- data.frame("condition" = "mutant GHu vs mock control in roots and shoots","GOghu" = B_result$result$term_id,
+"name" = B_result$result$term_name, "ratio" = B_result$result$term_size, "P.value" = B_result$result$p_value)
+library(ggplot2)
+ggplot(data = dataGOB, aes(x = "wildtype GHu vs mock control in roots and shoots", y = name, 
+                        color = P.value, size = ratio)) + 
+  geom_point() +
+  scale_color_gradient(low = "red", high = "blue") +
+  theme_bw() + 
+  ylab("") + 
+  xlab("") + 
+  ggtitle("GO enrichment analysis")
+ggsave("shootstoroots.pdf", height=4, width=6)
+```

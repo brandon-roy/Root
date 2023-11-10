@@ -1,0 +1,373 @@
+---
+title: "File Conversion Code"
+author: "Brandon Roy"
+date: "2023-06-06"
+output: html_document
+---
+
+```{r}
+# files needed: 
+
+# out.emapper.annotations1.xlsx 
+#       which was made using EggNOG annotation of Niben101_annotation.proteins.fasta from Solgenomics/BTI
+# output99.gmt
+#       created halfway through this code
+# output888.txt 
+#       which was derived from parsing output99.gmt
+# updated_output999.gmt
+#       created from this script
+
+
+```
+
+
+```{r}
+library(dplyr)
+
+# Read the input file
+input_file <- "output9999.gmt"
+data <- read.table(input_file, sep = "\t", stringsAsFactors = FALSE)
+
+# Create an empty list to store the rows
+output_list <- list()
+
+# Iterate over each row in the input data
+for (i in 1:nrow(data)) {
+  go_number <- data[i, 1]
+  description <- data[i, 2]
+  gene_ids <- data[i, 3:length(data)]
+  
+  # Iterate over each gene ID in the current row
+  for (j in 1:length(gene_ids)) {
+    gene_id <- gene_ids[j]
+    
+    # Create a new row for each gene ID and GO term combination
+    new_row <- c(GeneID = gene_id, Description = paste(go_number, description, sep = ", "))
+    
+    # Append the new row to the output list
+    output_list <- c(output_list, new_row)
+  }
+}
+
+# Convert the output list to a data frame
+output <- do.call(rbind, output_list)
+
+# Write the output data frame to a new file
+output_file <- "differentGOfile.txt"
+write.table(output, file = output_file, sep = "\t", row.names = FALSE, quote = FALSE)
+
+# Print the first few rows of the output for demonstration
+head(output)
+
+```
+
+```{r}
+# Install and load the readr package
+install.packages("readr")
+library(readr)
+
+# Set the input and output file paths
+input_file <- "output9999.gmt"
+output_file <- "geneID2GO.txt"
+
+# Set the chunk size for processing the file
+chunk_size <- 1000
+
+# Open the input and output files
+con_in <- file(input_file, "r")
+con_out <- file(output_file, "w")
+
+# Set the connection buffer size
+options(readr.num_columns = 2, readr.col_names = FALSE, vroom.skip = 1e5)
+
+# Process the file in chunks
+while (length(lines <- readLines(con_in, n = chunk_size)) > 0) {
+  data <- read_delim(lines, delim = "\t", col_names = FALSE)
+  gene_ids <- data[, -1]
+  go_term <- data[, 1]
+  num_genes <- nrow(gene_ids)
+  
+  # Write gene IDs and GO term to the output file
+  for (i in 1:num_genes) {
+    writeLines(paste(gene_ids[i, ], go_term[i], sep = "\t"), con_out)
+  }
+}
+
+# Close the input and output files
+close(con_in)
+close(con_out)
+
+# Load the required library
+library(readxl)
+library(dplyr)
+library(tidyr)
+
+# Set the input and output file paths
+input_file <- "out.emapper.annotations1.xlsx"
+output_file <- "outputGO.txt"
+
+# Read the Excel file
+data <- read_excel(input_file)
+
+# Create a new data frame to store the output
+output_data <- data.frame(gene_id = character(),
+                          go_term = character(),
+                          stringsAsFactors = FALSE)
+
+# Iterate over each row in the data
+for (i in 1:nrow(data)) {
+  gene_id <- data$GeneID[i]
+  go_terms <- strsplit(as.character(data$GOs[i]), ",")[[1]]
+  output_data <- rbind(output_data, data.frame(gene_id = rep(gene_id, length(go_terms)),
+                                               go_term = go_terms,
+                                               stringsAsFactors = FALSE))
+}
+
+# Write the output to the file
+write.table(output_data, output_file, sep = "\t", row.names = FALSE, col.names = FALSE, quote = FALSE)
+
+# Print a message indicating successful completion
+cat("Output file created:", output_file, "\n")
+
+
+
+
+
+
+Sys.setenv("VROOM_CONNECTION_SIZE"=2048^2 )
+# Read the .gmt file and extract gene IDs and GO terms
+dataGO <- read_delim(input_file, delim = "\t", col_names = FALSE)
+gene_ids <- dataGO[, -1]
+go_terms <- dataGO[, 1]
+
+# Create a data frame with matching lengths of gene IDs and GO terms
+output_data <- data.frame(
+  gene_id = unlist(lapply(gene_ids, function(x) rep(x, times = length(x)))),
+  go_term = rep(go_terms, lengths(gene_ids))
+)
+
+# Write the output data frame to a new text file
+write_delim(output_data, output_file, delim = "\t", col_names = FALSE)
+
+#Create a data frame with matching lengths of gene IDs and GO terms
+output_data <- data.frame(
+  gene_id = rep(unlist(gene_ids), lengths(gene_ids)),
+  go_term = rep(go_terms, lengths(gene_ids))
+)
+
+# Write the output data frame to a new text file
+write_delim(output_data, output_file, delim = "\t", col_names = FALSE)
+
+
+
+
+
+
+```
+
+#This block is okay for a midpoint analysis with GO:XXXXXXX and followed by tab delineated geneID's
+```{r}
+# This generated output99.gmt and it looks great
+
+# Install the 'readxl' package if it's not already installed
+# install.packages("readxl")
+
+# Load the 'readxl' package
+library(readxl)
+
+# Read the Excel file
+excel_file <- read_excel("out.emapper.annotations1.xlsx")
+
+# Create an empty list to store the GOs and corresponding GeneIDs
+go_list <- list()
+
+# Iterate over each row in the Excel file
+for (i in 1:nrow(excel_file)) {
+  # Get the GOs for the current row
+  go_terms <- strsplit(as.character(excel_file$GOs[i]), ",")[[1]]
+  
+  # Get the GeneID for the current row
+  gene_id <- excel_file$GeneID[i]
+  
+  # Iterate over each GO term
+  for (go_term in go_terms) {
+    # Check if the GO term already exists in the list
+    if (go_term %in% names(go_list)) {
+      # If it exists, append the GeneID to the existing entry
+      go_list[[go_term]] <- paste(go_list[[go_term]], gene_id, sep = "\t")
+    } else {
+      # If it doesn't exist, create a new entry with the GeneID
+      go_list[[go_term]] <- gene_id
+    }
+  }
+}
+
+# Write the GOs and corresponding GeneIDs to a .gmt file
+gmt_file <- file("output99.gmt", "w")
+for (go_term in names(go_list)) {
+  gene_ids <- go_list[[go_term]]
+  
+  # Write the GO term and corresponding GeneIDs to the .gmt file
+  cat(go_term, "\t", gene_ids, "\n", file = gmt_file)
+}
+close(gmt_file)
+
+
+```
+
+```{r}
+
+# Load required libraries
+library(httr)
+library(jsonlite)
+
+# Read the file
+data <- read.table("output888.txt", sep = "\t", header = FALSE, stringsAsFactors = FALSE, fill = TRUE)
+
+# Extract unique GOIDs from the first column
+goids <- unique(data$V1)
+
+# Create a function to retrieve GO term description from the API
+getGoTerm <- function(goid) {
+  url <- paste0("http://api.geneontology.org/api/ontology/term/", goid, "/")
+  response <- GET(url)
+  content <- fromJSON(rawToChar(response$content))
+  term <- content$label
+  return(term)
+}
+
+# Iterate over each GOID, retrieve the term, and replace the second column with the term
+for (i in seq_along(goids)) {
+  goid <- goids[i]
+  term <- getGoTerm(goid)
+  data[data$V1 == goid,][, 2] <- term
+  # Print progress every 200 iterations
+  if (i %% 500 == 0) {
+    cat("Processed", i, "out of", length(goids), "queries\n")
+  }
+}
+#If an error arises here, you may have to initiate the second column in the dataframe 'data'
+
+
+
+# Write the updated data to a new file
+write.table(data, "updated_output999.txt", sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+# Edit the output to be .gmt in your local file browser
+
+
+```
+
+
+
+```{r}
+# Read the input file
+input_file <- "output9999.gmt"
+data <- read.table(input_file, sep = "\t", stringsAsFactors = FALSE)
+
+# Create an empty list to store the rows
+output_list <- list()
+
+# Iterate over each row in the input data
+for (i in 1:nrow(data)) {
+  go_number <- data[i, 1]
+  description <- data[i, 2]
+  gene_ids <- data[i, 3:length(data)]
+  
+  # Iterate over each gene ID in the current row
+  for (j in 1:length(gene_ids)) {
+    gene_id <- gene_ids[j]
+    
+    # Create a new row for each gene ID and GO term combination
+    new_row <- c(GeneID = gene_id, Description = paste(go_number, description, sep = ", "))
+    
+    # Append the new row to the output list
+    output_list <- c(output_list, new_row)
+    
+    if (i %% 500 == 0) {
+    cat("Processed", i, "out of", length(goids), "queries\n")
+  }
+  }
+}
+
+# Convert the output list to a data frame
+output <- do.call(rbind, output_list)
+
+# Write the output data frame to a new file
+output_file <- "differentGOlist.txt"
+write.table(output, file = output_file, sep = "\t", row.names = FALSE, quote = FALSE)
+
+# Print the first few rows of the output for demonstration
+head(output)
+
+```
+
+
+#Code block is not needed
+```{r}
+
+
+
+library(stringr)
+
+# Define the input and output file paths
+input_file <- "Niben101_annotation.gene_models.gff"
+output_file <- "output.txt"
+
+# Create a list to store gene ontologies and associated gene IDs
+gene_dict <- list()
+
+# Read the input GFF file
+gff_lines <- readLines(input_file)
+
+# Process each line in the GFF file
+for (line in gff_lines) {
+  if (substr(line, 1, 1) == "#") {
+    next  # Skip comment lines
+  }
+  
+  # Split the line by tab character
+  columns <- strsplit(line, "\t")[[1]]
+  
+  # Extract the gene ontology term and gene ID from the line
+  gene_id_match <- str_match(columns[9], "ID=([^;]+)")
+  ontology_terms_match <- str_match(columns[9], "Ontology_term=([^;]+)")
+  
+  if (!is.na(gene_id_match) && !is.na(ontology_terms_match)) {
+    gene_id <- gene_id_match[2]
+    ontology_terms <- strsplit(ontology_terms_match[2], ",")[[1]]
+    
+    # Iterate over each ontology term
+    for (term in ontology_terms) {
+      # Remove "GO:" prefix from the ontology term
+      term <- gsub("GO:", "", term)
+      
+      # Check if the ontology term already exists in the list
+      if (term %in% names(gene_dict)) {
+        gene_dict[[term]] <- c(gene_dict[[term]], gene_id)
+      } else {
+        gene_dict[[term]] <- gene_id
+      }
+    }
+  }
+}
+
+# Open the output file for writing
+output <- file(output_file, "w")
+
+# Write gene ontologies and associated gene IDs to the output file
+for (ontology in names(gene_dict)) {
+  # Convert the list of gene IDs to a comma-separated string
+  gene_ids <- paste(gene_dict[[ontology]], collapse = ",")
+  
+  # Write the ontology term and gene IDs to the output file
+  writeLines(paste("GO:", ontology, gene_ids, sep = "\t"), output)
+}
+
+# Close the output file
+close(output)
+
+print("Parsing complete. The output file has been generated.")
+
+```
+
+
