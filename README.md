@@ -33,14 +33,11 @@
 <p>
     Transcriptomic analysis revealed significant dysregulation in genes involved in immune response, hormone signaling, and oxidative stress pathways, particularly at 17 dpi.
 </p>
-
-
-</body>
 <h2>Full Manuscript PDF</h2>
-<object data="BMC_Microbiology_Roy&Fuchs2024.pdf" type="application/pdf" width="100%" height="800px">
+<object data="./BMC_Microbiology_Roy&Fuchs2024.pdf" type="application/pdf" width="100%" height="800px">
     <p>Your browser does not support PDFs.
         <a href="BMC_Microbiology_Roy&Fuchs2024.pdf">Download the PDF</a>.</p>
 </object>
-
+</body>
 </html>
 
